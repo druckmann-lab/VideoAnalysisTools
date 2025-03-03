@@ -129,6 +129,11 @@ def temp_hierarchical_archive(tmp_path, n_trials=3, n_ims_per_trial=10, extra_fi
     
     return archive_path
 
+def test_transform_image():
+    """
+    If I understand transform_image correctly, it is defined in terms of the target output pixel shape. That is, we crop the top `np.ceil(crop_info["h_coord"]/target_shape[0])`% of the image, and then reshape to `target_shape`. We can decorrelate these parameters. 
+    """
+
 class Test_SessionFramesDataset:
     def test_init(self, temp_hierarchical_folder):
         """Test the SessionFramesDataset initialization and basic properties.
@@ -254,7 +259,5 @@ class Test_SessionFramesDataset:
             result_searchsorted = dataset.__getitem__(idx, method="searchsorted")
             assert np.array_equal(result_argmax, result_searchsorted), \
                 f"Methods returned different results for index {idx}"
-
-        assert 0 
 
 
