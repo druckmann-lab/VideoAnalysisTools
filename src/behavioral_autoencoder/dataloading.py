@@ -44,9 +44,11 @@ class SessionFramesDataModule(pl.LightningDataModule):
         dataset_config,
         batch_size,
         num_workers,
-        trainset_subsample_rate,
-        trainset_subsample_offset,
-        trainset_subtract_mean=True,
+        train_subsample_rate,
+        train_subsample_offset,
+        train_subtract_mean=True,
+        val_subsample_rate,
+        val_subsample_offset,
         ):
         """
         By default, checks if we have already calculated the image mean on a particular dataset for a particular training set, and if so gets that cached mean.
@@ -78,13 +80,15 @@ class SessionFramesDataModule(pl.LightningDataModule):
         self.dataset_config = dataset_config
         self.batch_size = batch_size
         self.num_workers = num_workers
-        self.subsample_rate = trainset_subsample_rate
-        self.subsample_offset = trainset_subsample_offset
+        self.train_subsample_rate = train_subsample_rate
+        self.train_subsample_offset = train_subsample_offset
+        self.val_subsample_rate = val_subsample_rate
+        self.val_subsample_offset = val_subsample_offset
         self.subtract_mean = trainset_subtract_mean
 
         if self.subtract_mean:
             print("Calculating mean image")
-            self.mean_image = calculate_mean_image(self.data_path,dataset_config,self.subsample_rate,self.subsample_offset,self.batch_size,self.num_workers)
+            self.mean_image = calculate_mean_image(self.data_path,dataset_config,self.train_subsample_rate,self.train_subsample_offset,self.batch_size,self.num_workers)
             subtract_mean = torchvision.transforms.Lambda(self.subtract_mean_image)
             # augment the transformation for our datasets: 
             if self.dataset_config["transform"] is not None:
@@ -109,10 +113,11 @@ class SessionFramesDataModule(pl.LightningDataModule):
         self.dataset = SessionFramesTorchvision(self.data_path,transform = self.transform,**self.dataset_config)
         all_indices = np.arange(len(self.dataset))
         ## Subsample indices
-        train_inds = all_indices[self.subsample_offset::self.subsample_rate]
-        test_inds = [i for i in all_indices if not (i in train_inds)]
+        train_inds = all_indices[self.train_subsample_offset::self.train_subsample_rate]
+        val_inds = all_indices[self.val_subsample_offset::self.val_subsample_rate]
+        #test_inds = [i for i in all_indices if not (i in train_inds)]
         self.trainset = Subset(self.dataset,train_inds)
-        self.valset = Subset(self.dataset,test_inds)
+        self.valset = Subset(self.dataset,val_inds)
 
     def train_dataloader(self,shuffle=True):
         dataloader = DataLoader(
