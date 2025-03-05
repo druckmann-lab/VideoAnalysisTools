@@ -122,7 +122,7 @@ class Test_SingleSessionModule():
                 "extension":".png",
                 "trial_pattern":None
                 }
-        sfdm = SessionFramesDataModule(data_config,10,2,10,1)
+        sfdm = SessionFramesDataModule(data_config,10,2,10,1,10,1)
         logger = TensorBoardLogger("tb_logs",name="test_single_session_auto",log_graph=True)
         trainer = pl.Trainer(
             max_epochs=1,
@@ -163,7 +163,7 @@ class Test_SingleSessionModule():
                 "extension":".png",
                 "trial_pattern":None
                 }
-        sfdm = SessionFramesDataModule(data_config,10,2,10,1)
+        sfdm = SessionFramesDataModule(data_config,10,2,10,1,10,1)
         logger = TensorBoardLogger("tb_logs",name="test_single_session_auto",log_graph=True)
         trainer = pl.Trainer(
             max_epochs=1,
