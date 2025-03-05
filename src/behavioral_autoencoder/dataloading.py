@@ -22,9 +22,9 @@ def calculate_mean_image(data_path,dataset_config,subsample_rate,subsample_offse
     ## use dataloader to compute sum image 
     trainloader = DataLoader(trainset,batch_size=10)
 
-    sum_im = torch.zeros(dataset[0].shape)
+    sum_im = torch.zeros(dataset[0].shape[1:]) ## should be 
     for data in trainloader:
-        sum_im+=data.sum(axis=0)
+        sum_im+=data.sum(axis=0).sum(axis=0) ## sum across the batch and sequence dimensions.
     mean=sum_im/len(trainset)    
     return mean
 
@@ -98,12 +98,10 @@ class SessionFramesDataModule(pl.LightningDataModule):
         else:
             self.transform = self.dataset_config["transform"]
 
-        self.setup()    
-
     def subtract_mean_image(self,x):
         return x-self.mean_image
 
-    def setup(self):
+    def setup(self,stage):
         _ = self.dataset_config.pop("transform")
         dataset = SessionFramesTorchvision(self.data_path,transform = self.transform,**self.dataset_config)
         all_indices = np.arange(len(dataset))

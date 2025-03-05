@@ -95,6 +95,7 @@ class SessionFramesDataset(Dataset):
     cumsum_n_trials : arraylike    
         cumulative index for frame index across all trials. 
 
+
     """
 
     def __init__(self, base_folder, extension=".png", crop_info={'h_coord': 26}, trial_pattern=None):
@@ -299,9 +300,11 @@ class SessionFramesTorchvision(Dataset):
         cumulative index for frame index across all trials. 
     transform : any    
         None or transform function 
+    seq_length : int    
+        we end up outputting data which has a sequence dimension for consistency with other implementations as a singleton dimension preceding the others. 
     """
 
-    def __init__(self, base_folder, extension=".png", trial_pattern=None, transform = None):
+    def __init__(self, base_folder, extension=".png", trial_pattern=None, transform = None, seq_length = 1):
         """
         Parameters
         ----------
@@ -319,6 +322,8 @@ class SessionFramesTorchvision(Dataset):
         """
         self.base_folder = base_folder
         self.extension = extension
+        self.seq_length = seq_length
+        assert seq_length == 1, "can't do more than this. "
         
         # Get all items in the base folder
         all_items = os.listdir(base_folder)
@@ -386,6 +391,6 @@ class SessionFramesTorchvision(Dataset):
         img = Image.open(image_path)
         if self.transform:
             img = self.transform(img)
-        return img
+        return img[None,:]
 
 
