@@ -1,0 +1,10 @@
+{
+"scheduler":"linear",
+"start_factor":0.1,
+"end_factor":1,
+"warmup_steps":10,
+"max_epochs":500,
+"weight_decay":0,
+"l2_weight":1,
+"learning_rate":0
+}
