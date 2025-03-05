@@ -84,7 +84,7 @@ class SessionFramesDataModule(pl.LightningDataModule):
 
         if self.subtract_mean:
             print("Calculating mean image")
-            self.mean_image = calculate_mean_image(self.data_path,dataset_config,self.subsample_rate,self.subsample_offset,self,batch_size,self.num_workers)
+            self.mean_image = calculate_mean_image(self.data_path,dataset_config,self.subsample_rate,self.subsample_offset,self.batch_size,self.num_workers)
             subtract_mean = torchvision.transforms.Lambda(self.subtract_mean_image)
             # augment the transformation for our datasets: 
             if self.dataset_config["transform"] is not None:
