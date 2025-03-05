@@ -103,13 +103,13 @@ class SessionFramesDataModule(pl.LightningDataModule):
 
     def setup(self,stage):
         _ = self.dataset_config.pop("transform")
-        dataset = SessionFramesTorchvision(self.data_path,transform = self.transform,**self.dataset_config)
-        all_indices = np.arange(len(dataset))
+        self.dataset = SessionFramesTorchvision(self.data_path,transform = self.transform,**self.dataset_config)
+        all_indices = np.arange(len(self.dataset))
         ## Subsample indices
         train_inds = all_indices[self.subsample_offset::self.subsample_rate]
         test_inds = [i for i in all_indices if not (i in train_inds)]
-        self.trainset = Subset(dataset,train_inds)
-        self.valset = Subset(dataset,test_inds)
+        self.trainset = Subset(self.dataset,train_inds)
+        self.valset = Subset(self.dataset,test_inds)
 
     def train_dataloader(self,shuffle=True):
         dataloader = DataLoader(

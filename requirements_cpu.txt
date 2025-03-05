@@ -1,4 +1,10 @@
-pip install torch  # should specify a version later
-pip install numpy
-pip install matplotlib
-pip install pytest
+torch  # should specify a version later
+torchvision
+joblib
+pytorch_lightning
+numpy
+matplotlib
+pytest
+opencv-python
+fire
+scikit-image

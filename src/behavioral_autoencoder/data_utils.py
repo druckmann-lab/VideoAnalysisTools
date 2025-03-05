@@ -99,7 +99,6 @@ def main(video_dir,frame_dir,video_suffix=".avi"):
         with open(frame_dir / "annotations.txt", "a") as f:
             f.write(f"{video_dir_name} {first} {last} 0\n")
 
-def npy_to_frames()
 
 if __name__ == "__main__":
     fire.Fire(main)
