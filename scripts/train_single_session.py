@@ -12,7 +12,7 @@ import pytorch_lightning as pl
 from behavioral_autoencoder.module import SingleSessionModule
 from behavioral_autoencoder.dataset import CropResizeProportion
 from behavioral_autoencoder.dataloading import SessionFramesDataModule
-from behavioral_autoencoder.eval import get_all_predicts_latents
+from behavioral_autoencoder.eval import get_all_predicts_latents,get_dl_predicts_latents
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
@@ -62,7 +62,10 @@ def main(model_config_path, train_config_path, data_path, data_config_path):
             train_config["batch_size"],
             train_config["num_workers"],
             train_config["subsample_rate"],
-            train_config["subsample_offset"])
+            train_config["subsample_offset"],
+            train_config["val_subsample_rate"],
+            train_config["val_subsample_offset"]
+            )
 
     ## Set up logging and trainer
     print("\nSetting up logging and checkpoints...")

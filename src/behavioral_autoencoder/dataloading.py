@@ -46,9 +46,9 @@ class SessionFramesDataModule(pl.LightningDataModule):
         num_workers,
         train_subsample_rate,
         train_subsample_offset,
-        train_subtract_mean=True,
         val_subsample_rate,
         val_subsample_offset,
+        trainset_subtract_mean=True,
         ):
         """
         By default, checks if we have already calculated the image mean on a particular dataset for a particular training set, and if so gets that cached mean.
