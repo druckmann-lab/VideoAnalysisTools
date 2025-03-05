@@ -1,4 +1,5 @@
 import torchvision
+from tqdm import tqdm
 import numpy as np
 import torch
 from torch.utils.data import Subset,DataLoader
@@ -7,7 +8,7 @@ import pytorch_lightning as pl
 from joblib import Memory
 import os
 
-def calculate_mean_image(data_path,dataset_config,subsample_rate,subsample_offset):
+def calculate_mean_image(data_path,dataset_config,subsample_rate,subsample_offset,batch_size,num_workers):
     """
     Calculate mean image from given training set parameters. Gets parameters from SessionFramesDataModule
     TODO: implement caching for this function. 
@@ -20,10 +21,10 @@ def calculate_mean_image(data_path,dataset_config,subsample_rate,subsample_offse
     trainset = Subset(dataset,train_inds)
 
     ## use dataloader to compute sum image 
-    trainloader = DataLoader(trainset,batch_size=10)
+    trainloader = DataLoader(trainset,batch_size=batch_size,num_workers=num_workers)
 
     sum_im = torch.zeros(dataset[0].shape[1:]) ## should be 
-    for data in trainloader:
+    for data in tqdm(trainloader):
         sum_im+=data.sum(axis=0).sum(axis=0) ## sum across the batch and sequence dimensions.
     mean=sum_im/len(trainset)    
     return mean
@@ -83,7 +84,7 @@ class SessionFramesDataModule(pl.LightningDataModule):
 
         if self.subtract_mean:
             print("Calculating mean image")
-            self.mean_image = calculate_mean_image(self.data_path,dataset_config,self.subsample_rate,self.subsample_offset)
+            self.mean_image = calculate_mean_image(self.data_path,dataset_config,self.subsample_rate,self.subsample_offset,self,batch_size,self.num_workers)
             subtract_mean = torchvision.transforms.Lambda(self.subtract_mean_image)
             # augment the transformation for our datasets: 
             if self.dataset_config["transform"] is not None:
