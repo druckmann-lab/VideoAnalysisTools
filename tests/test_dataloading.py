@@ -77,7 +77,7 @@ def temp_hierarchical_folder_generator(tmp_path, n_trials=3, n_ims_per_trial=10,
     return session_dir
 
 class Test_SessionFramesDataModule():
-    config_path = os.path.join(here,"..","configs","crop_configs","alm_side.json")
+    config_path = os.path.join(here,"..","configs","data_configs","alm_side.json")
     def test_init(self,tmp_path):
         with open(self.config_path,"r") as f:
             crop_config = json.load(f)

@@ -264,7 +264,7 @@ class Test_SessionFramesDataset:
                 f"Methods returned different results for index {idx}"
 
 class Test_SessionFramesTorchvision:
-    config_path = os.path.join(here,"..","configs","crop_configs","alm_side.json")
+    config_path = os.path.join(here,"..","configs","data_configs","alm_side.json")
     def test_init(self, temp_hierarchical_folder):
         """Test the SessionFramesTorchvision initialization and basic properties, including with default cropping given by CropResizeProportion with default.
         
