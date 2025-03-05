@@ -5,8 +5,10 @@ Saves checkpoints for the corresponding model, outputs to tensorboard, and final
 """
 import os
 import fire
+import json
 import joblib
 import datetime
+import pytorch_lightning as pl
 from behavioral_autoencoder.module import SingleSessionModule
 from behavioral_autoencoder.dataset import CropResizeProportion
 from behavioral_autoencoder.dataloading import SessionFramesDataModule
@@ -16,15 +18,21 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 here = os.path.join(os.path.abspath(os.path.dirname(__file__)))
 
-def main(model_config_path,train_config_path,data_path,crop_config_path):
+def main(model_config_path, train_config_path, data_path, data_config_path):
     """This main function takes as input four paths. These paths indicate the model configuration parameters, training configuration parameters, path to the data directory, and cropping configuration, respectively. By default we assume that we are training a single session autoencoder.  
     """
+    print("\n=== Starting Single Session Autoencoder Training ===")
+    
     ## Model setup 
+    print("\nLoading configurations...")
     with open(model_config_path,"r") as f:
         model_config = json.load(f)
     with open(train_config_path,"r") as f:
         train_config = json.load(f)
     model_name = "single_session_autoencoder"    
+
+    print(f"Model config: {model_config}")
+    print(f"Training config: {train_config}")
 
     hparams = {
             "model":model_name,
@@ -32,16 +40,23 @@ def main(model_config_path,train_config_path,data_path,crop_config_path):
             "train_config":train_config
             }
 
+    print("\nInitializing model...")
     ssm = SingleSessionModule(hparams)
 
     ## Data setup 
-    alm_cropping = CropResizeProportion(crop_config_path)
+    with open(data_config_path,"r") as f:
+        data_process_config = json.load(f)
+    print("\nSetting up data...")
+    alm_cropping = CropResizeProportion(data_config_path)
     data_config = {
-            "data_path":session_dir,
+            "data_path":data_path,
             "transform":alm_cropping,
-            "extension":".png",
-            "trial_pattern":None
+            "extension":data_process_config["extension"],
+            "trial_pattern":data_process_config["trial_pattern"]
             }
+    print(f"Data config: {data_config}")
+    
+    print("Initializing data module...")
     sfdm = SessionFramesDataModule(
             data_config,
             train_config["batch_size"],
@@ -50,41 +65,50 @@ def main(model_config_path,train_config_path,data_path,crop_config_path):
             train_config["subsample_offset"])
 
     ## Set up logging and trainer
+    print("\nSetting up logging and checkpoints...")
     date=datetime.datetime.now().strftime("%m-%d-%y")
     time=datetime.datetime.now().strftime("%H_%M_%S")
     timestamp_model = os.path.join(here,"models",model_name,date,time)
-    timestamp_pred = os.path.join(here,"preds",pred_name,date,time)
+    timestamp_pred = os.path.join(here,"preds",model_name,date,time)
+    print(f"Model will be saved to: {timestamp_model}")
+    print(f"Predictions will be saved to: {timestamp_pred}")
+    
     logger = TensorBoardLogger("tb_logs",name="test_single_session_auto",log_graph=True)
+    checkpoint = ModelCheckpoint(monitor="mse/val", mode="max", save_last=False, dirpath=timestamp_model)
 
-    checkpoint = ModelCheckpoint(monitor="acc/mse", mode="max", save_last=False, dirpath = outdir)
-
+    print("\nInitializing trainer...")
     trainer = pl.Trainer(
         fast_dev_run=train_config["fast_dev_run"],
         max_epochs=train_config["max_epochs"],
-        accelerator=train_config["accelerator"],  # Explicitly use CPU for testing
-        enable_checkpointing=True,  # Disable for testing
-        checkpoint_callback = checkpoint,
-        log_every_n_steps = 1,
-        logger=logger,  # Disable logging for testing
-        enable_progress_bar=True,  # See training progress
+        accelerator=train_config["accelerator"],
+        enable_checkpointing=True,
+        callbacks=[checkpoint],
+        log_every_n_steps=1,
+        logger=logger,
+        enable_progress_bar=True,
     )
 
     ## Fit the model
+    print(f"\nStarting training for {train_config['max_epochs']} epochs...")
     trainer.fit(ssm,sfdm)
+    print("Training completed!")
 
     ## Get out predictions 
+    print("\nGenerating predictions and latents...")
     preds,latents = get_all_predicts_latents(ssm,sfdm,train_config["batch_size"],train_config["num_workers"])
 
-    ## Save out all relevant metadata. 
-    os.mkdir(timestamp_pred)
+    ## Save out all relevant metadata
+    print("\nSaving results...")
+    os.makedirs(timestamp_pred, exist_ok=True)
     joblib.dump(preds,os.path.join(timestamp_pred,"preds"))
     joblib.dump(latents,os.path.join(timestamp_pred,"latents"))
     with open(os.path.join(timestamp_pred,"model_config"),"w") as f:
-        json.dump(hparams)
-
+        json.dump(hparams, f)
     with open(os.path.join(timestamp_pred,"data_config"),"w") as f:
-        json.dump(data_config)
-
+        json.dump(data_config, f)
+    
+    print("\n=== Training Complete ===")
+    print(f"Results saved to: {timestamp_pred}")
 
 if __name__ == "__main__":
     fire.Fire(main)
