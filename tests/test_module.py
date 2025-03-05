@@ -1,15 +1,16 @@
 """
-Test what the dataloader does. 
 """
+from behavioral_autoencoder.module import SingleSessionModule
 from behavioral_autoencoder.dataset import CropResizeProportion
-import json
-import os
-import cv2
-import numpy as np
 from behavioral_autoencoder.dataloading import SessionFramesDataModule
+from pytorch_lightning.loggers import TensorBoardLogger
+import numpy as np
+import pytorch_lightning as pl
+import cv2
+import os 
+import json
 
-
-here = os.path.abspath(os.path.dirname(__file__))
+here = os.path.join(os.path.abspath(os.path.dirname(__file__)))
 
 def temp_hierarchical_folder_generator(tmp_path, n_trials=3, n_ims_per_trial=10, extra_files=None):
     """Creates a temporary hierarchical folder structure for testing.
@@ -76,21 +77,44 @@ def temp_hierarchical_folder_generator(tmp_path, n_trials=3, n_ims_per_trial=10,
     
     return session_dir
 
-class Test_SessionFramesDataModule():
-    config_path = os.path.join(here,"..","configs","crop_configs","alm_side.json")
-    def test_init(self,tmp_path):
-        with open(self.config_path,"r") as f:
+class Test_SingleSessionModule():
+    model_config_path = os.path.join(here,"..","configs","model_configs","alm_default.json")
+    train_config_path = os.path.join(here,"..","configs","train_configs","alm_default.json")
+    crop_config_path = os.path.join(here,"..","configs","crop_configs","alm_side.json")
+    def test_init(self):
+        with open(self.model_config_path,"r") as f:
+            model_config = json.load(f)
+        with open(self.train_config_path,"r") as f:
+            train_config = json.load(f)
+        hparams = {
+                "model":"single_session_autoencoder",
+                "model_config":model_config,
+                "train_config":train_config
+                }
+        ssm = SingleSessionModule(hparams)
+    def test_baby_train_loop(self,tmp_path):
+        model_config_path = os.path.join(here,"..","configs","model_configs","alm_default.json")
+        train_config_path = os.path.join(here,"..","configs","train_configs","alm_default.json")
+
+        with open(self.model_config_path,"r") as f:
+            model_config = json.load(f)
+        with open(self.train_config_path,"r") as f:
+            train_config = json.load(f)
+        with open(self.crop_config_path,"r") as f:
             crop_config = json.load(f)
-        # Create a larger dataset
-        n_trials = 10  # Increased number of trials
-        n_ims_per_trial = 50  # Increased images per trial
+
+        hparams = {
+                "model":"single_session_autoencoder",
+                "model_config":model_config,
+                "train_config":train_config
+                }
+        ssm = SingleSessionModule(hparams)
+
         session_dir = temp_hierarchical_folder_generator(
             tmp_path,
-            n_trials=n_trials,
-            n_ims_per_trial=n_ims_per_trial
         )
-        
-        alm_cropping = CropResizeProportion(self.config_path)
+
+        alm_cropping = CropResizeProportion(self.crop_config_path)
         data_config = {
                 "data_path":session_dir,
                 "transform":alm_cropping,
@@ -98,29 +122,15 @@ class Test_SessionFramesDataModule():
                 "trial_pattern":None
                 }
         sfdm = SessionFramesDataModule(data_config,10,2,10,1)
-        assert sfdm.mean_image.shape == (1,crop_config["target_h"],crop_config["target_w"])
-
-    def test_train_dataloader(self,tmp_path):
-        with open(self.config_path,"r") as f:
-            crop_config = json.load(f)
-        # Create a larger dataset
-        n_trials = 10  # Increased number of trials
-        n_ims_per_trial = 50  # Increased images per trial
-        session_dir = temp_hierarchical_folder_generator(
-            tmp_path,
-            n_trials=n_trials,
-            n_ims_per_trial=n_ims_per_trial
+        logger = TensorBoardLogger("tb_logs",name="test_single_session_auto",log_graph=True)
+        trainer = pl.Trainer(
+            max_epochs=1,
+            accelerator='cpu',  # Explicitly use CPU for testing
+            enable_checkpointing=False,  # Disable for testing
+            logger=logger,  # Disable logging for testing
+            enable_progress_bar=True,  # See training progress
         )
-        
-        alm_cropping = CropResizeProportion(self.config_path)
-        data_config = {
-                "data_path":session_dir,
-                "transform":alm_cropping,
-                "extension":".png",
-                "trial_pattern":None
-                }
-        sfdm = SessionFramesDataModule(data_config,10,2,10,1,)
-        dataloader = sfdm.train_dataloader()
-        
-        for batch in dataloader:
-            assert batch.shape[1:] == (1,1,crop_config["target_h"],crop_config["target_w"])
+        trainer.fit(ssm,sfdm)
+        assert trainer.current_epoch == 1, "Training should complete 2 epochs"
+        assert trainer.global_step > 0, "Should have completed some training steps"
+

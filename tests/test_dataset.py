@@ -285,7 +285,9 @@ class Test_SessionFramesTorchvision:
         # Test image properties
         first_image = dataset[0]
         assert isinstance(first_image, torch.Tensor), "Dataset should return numpy arrays"
-        assert first_image.shape[0] == 1, "Images should be 2D grayscale (H,W)"
+        assert len(first_image.shape) == 4
+        assert first_image.shape[0] == 1, "Sequence dimension should be 0"
+        assert first_image.shape[1] == 1, "Images should be 2D grayscale (H,W)"
         assert first_image.dtype == torch.float32, "Images should be float32"
         
         # Test dataset length
