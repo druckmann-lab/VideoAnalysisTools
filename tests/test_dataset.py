@@ -2,14 +2,18 @@
 Test functions within the dataset class.
 Uses test data inside `test_data` folder. 
 """
-from behavioral_autoencoder.dataset import SessionFramesDataset
+from behavioral_autoencoder.dataset import SessionFramesDataset,SessionFramesTorchvision,CropResizeProportion
 import pytest
 import numpy as np
+import time
+import torch
 import os
 from pathlib import Path
 import cv2
 import tarfile
 import shutil
+
+here = os.path.abspath(os.path.dirname(__file__))
 
 def temp_hierarchical_folder_generator(tmp_path, n_trials=3, n_ims_per_trial=10, extra_files=None):
     """Creates a temporary hierarchical folder structure for testing.
@@ -48,7 +52,7 @@ def temp_hierarchical_folder_generator(tmp_path, n_trials=3, n_ims_per_trial=10,
     np.random.seed(42)
     
     # Load example images
-    example_images = np.load('./test_data/example_images.npy')
+    example_images = np.load('./test_data/example_images.npy')*255
     
     # Create session directory
     session_dir = tmp_path / "temp_session"
@@ -131,7 +135,7 @@ def temp_hierarchical_archive(tmp_path, n_trials=3, n_ims_per_trial=10, extra_fi
 
 def test_transform_image():
     """
-    If I understand transform_image correctly, it is defined in terms of the target output pixel shape. That is, we crop the top `np.ceil(crop_info["h_coord"]/target_shape[0])`% of the image, and then reshape to `target_shape`. We can decorrelate these parameters. 
+    If I understand transform_image correctly, it is defined in terms of the target output pixel shape. That is, we crop the top `np.ceil(crop_info["h_coord"]/target_shape[0])`% of the image, and then reshape to `target_shape`. We can decorrelate these parameters to crop in the original pixel space, and then reshape to the desired target shape. 
     """
 
 class Test_SessionFramesDataset:
@@ -211,7 +215,6 @@ class Test_SessionFramesDataset:
         Test performance difference between searchsorted and argmax methods in __getitem__
         using a larger dataset.
         """
-        import time
         
         # Create a larger dataset
         n_trials = 100  # Increased number of trials
@@ -260,4 +263,147 @@ class Test_SessionFramesDataset:
             assert np.array_equal(result_argmax, result_searchsorted), \
                 f"Methods returned different results for index {idx}"
 
+class Test_SessionFramesTorchvision:
+    config_path = os.path.join(here,"..","configs","data_configs","alm_side.json")
+    def test_init(self, temp_hierarchical_folder):
+        """Test the SessionFramesTorchvision initialization and basic properties, including with default cropping given by CropResizeProportion with default.
+        
+        Tests:
+        1. Dataset can be initialized
+        2. Number of trials matches fixture
+        3. Image dimensions and format are correct
+        4. Dataset length matches expected total frames
+        """
+        alm_cropping = CropResizeProportion(self.config_path)
+        dataset = SessionFramesTorchvision(temp_hierarchical_folder,transform = alm_cropping)
 
+
+        
+        # Test number of trials
+        assert len(dataset.trial_folders) == 3, "Should have 3 trials by default"
+        
+        # Test image properties
+        first_image = dataset[0]
+        assert isinstance(first_image, torch.Tensor), "Dataset should return numpy arrays"
+        assert len(first_image.shape) == 4
+        assert first_image.shape[0] == 1, "Sequence dimension should be 0"
+        assert first_image.shape[1] == 1, "Images should be 2D grayscale (H,W)"
+        assert first_image.dtype == torch.float32, "Images should be float32"
+        
+        # Test dataset length
+        expected_length = 3 * 10  # n_trials * n_ims_per_trial
+        assert len(dataset) == expected_length, f"Dataset should have {expected_length} total frames"
+        
+        # Test all images are readable
+        for i in range(len(dataset)):
+            img = dataset[i]
+            assert img is not None, f"Failed to load image at index {i}"
+
+    def test_extra_frame_files(self, temp_hierarchical_folder_extra):
+        """
+        test for other files which are included in frame directories. 
+        """
+        alm_cropping = CropResizeProportion(self.config_path)
+        dataset = SessionFramesTorchvision(temp_hierarchical_folder_extra,transform = alm_cropping)
+        trialdirs = os.listdir(temp_hierarchical_folder_extra)
+        print(os.listdir(os.path.join(temp_hierarchical_folder_extra, trialdirs[0])))
+        assert len(dataset) == 30  # 3 trials * 10 images per trial
+        len(dataset)
+
+    def test_extra_dir_files(self, temp_hierarchical_folder_extra, tmp_path):
+        """
+        Test that the dataset properly filters trial directories when there are extra files
+        and folders in the base directory.
+        """
+        # Add some extra files and folders to the base directory
+        base_dir = temp_hierarchical_folder_extra
+        
+        # Create extra files
+        (base_dir / "metadata.json").touch()
+        (base_dir / ".DS_Store").touch()
+        
+        # Create a non-trial directory
+        other_dir = base_dir / "other_data"
+        other_dir.mkdir()
+        (other_dir / "some_file.txt").touch()
+        
+        # Test with no pattern (should include all directories including 'other_data')
+        alm_cropping = CropResizeProportion(self.config_path)
+        dataset = SessionFramesTorchvision(base_dir,transform = alm_cropping)
+        assert len(dataset.trial_folders) == 4  # 3 trial folders + other_data
+        assert "other_data" in dataset.trial_folders
+        
+        # Test with specific pattern for trial folders
+        dataset_with_pattern = SessionFramesTorchvision(base_dir, trial_pattern=r"^\d+_trial$",transform = alm_cropping)
+        assert len(dataset_with_pattern.trial_folders) == 3
+        assert all(folder.endswith("_trial") for folder in dataset_with_pattern.trial_folders)
+        assert "other_data" not in dataset_with_pattern.trial_folders
+        
+        # Test with pattern that should match nothing
+        dataset_no_matches = SessionFramesTorchvision(base_dir, trial_pattern=r"^nonexistent.*$",transform = alm_cropping)
+        assert len(dataset_no_matches.trial_folders) == 0
+
+    def test_getitem_performance(self, tmp_path):
+        """
+        Test performance difference between searchsorted and argmax methods in __getitem__
+        using a larger dataset.
+        """
+        
+        # Create a larger dataset
+        n_trials = 100  # Increased number of trials
+        n_ims_per_trial = 50  # Increased images per trial
+        session_dir = temp_hierarchical_folder_generator(
+            tmp_path, 
+            n_trials=n_trials,
+            n_ims_per_trial=n_ims_per_trial
+        )
+        
+        alm_cropping = CropResizeProportion(self.config_path)
+        dataset = SessionFramesTorchvision(session_dir,transform = alm_cropping)
+        n_items = len(dataset)
+        n_iterations = 1000  # Number of random accesses to test
+        
+        # Generate random indices to access
+        np.random.seed(42)  # For reproducibility
+        random_indices = np.random.randint(0, n_items, n_iterations)
+        
+        # Test argmax method
+        start_time = time.time()
+        for idx in random_indices:
+            _ = dataset.__getitem__(idx, method="argmax")
+        argmax_time = time.time() - start_time
+        
+        # Test searchsorted method
+        start_time = time.time()
+        for idx in random_indices:
+            _ = dataset.__getitem__(idx, method="searchsorted")
+        searchsorted_time = time.time() - start_time
+        
+        # Print results for inspection
+        print(f"\nPerformance comparison over {n_iterations} accesses:")
+        print(f"Dataset size: {n_trials} trials, {n_ims_per_trial} images per trial")
+        print(f"argmax method: {argmax_time:.4f} seconds")
+        print(f"searchsorted method: {searchsorted_time:.4f} seconds")
+        print(f"Speed improvement: {(argmax_time/searchsorted_time):.2f}x faster")
+        
+        # Assert searchsorted is faster
+        assert searchsorted_time < argmax_time, \
+            f"searchsorted ({searchsorted_time:.4f}s) should be faster than argmax ({argmax_time:.4f}s)"
+        
+        # Verify both methods return the same results
+        for idx in random_indices[:10]:  # Check first 10 indices
+            result_argmax = dataset.__getitem__(idx, method="argmax")
+            result_searchsorted = dataset.__getitem__(idx, method="searchsorted")
+            assert np.array_equal(result_argmax, result_searchsorted), \
+                f"Methods returned different results for index {idx}"
+
+    def test_compare_SessionDataset(self, temp_hierarchical_folder_extra, tmp_path):
+        """Ensure that preprocessing from both methods returns basically same data. Note that the tolerance levels are quite high here because of PIL has anti-aliasing on by default and we can't turn it off.
+
+        """
+        alm_cropping = CropResizeProportion(self.config_path)
+        torch_dataset = SessionFramesTorchvision(temp_hierarchical_folder_extra,transform = alm_cropping)
+        reference_dataset = SessionFramesDataset(temp_hierarchical_folder_extra)
+
+        for i in range(30):
+            assert np.allclose(torch_dataset[i].numpy(),reference_dataset[i],atol=1e-2)
