@@ -95,7 +95,7 @@ def main(model_config_path, train_config_path, data_path, data_config_path):
 
     ## Get out predictions 
     print("\nGenerating predictions and latents...")
-    preds,latents = get_all_predicts_latents(ssm,sfdm,train_config["batch_size"],train_config["num_workers"])
+    preds,latents = get_dl_predicts_latents(ssm,sfdm.train_dataloader(),train_config["batch_size"],train_config["num_workers"])
 
     ## Save out all relevant metadata
     print("\nSaving results...")
