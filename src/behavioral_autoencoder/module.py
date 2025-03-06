@@ -76,24 +76,18 @@ class Autoencoder_Models(pl.LightningModule):
                 "name": "learning_rate",
                 }
         elif self.hparams["train_config"]["scheduler"] == "linear_step":    
-            linear_scheduler = {
-                    "scheduler": LinearLR(
+            linear_scheduler = LinearLR(
                         optimizer,start_factor=self.hparams["train_config"]["start_factor"],
                         end_factor=self.hparams["train_config"]["end_factor"],
                         total_iters=self.hparams["train_config"]["warmup_steps"]
-                        ),
-                    "interval": "step",
-                    "name": "learning_rate"
-                    }
-            step_scheduler = {
-                "scheduler": torch.optim.lr_scheduler.MultiStepLR(
+                        )
+            step_scheduler = torch.optim.lr_scheduler.MultiStepLR(
                     optimizer, milestones = [7500,15000,22500], gamma = 0.1, last_epoch=-1
-                ),
-                "interval": "step",
-                "frequency":1,
-                "name": "learning_rate",
-                }
-            scheduler = ChainedScheduler(optimizer=optimizer,schedulers=[linear_scheduler,step_scheduler])
+            scheduler = {
+                "scheduler":ChainedScheduler(optimizer=optimizer,schedulers=[linear_scheduler,step_scheduler]),
+                "interval": "epoch",
+                "frequency": 1,
+                "name": "learning_rate"
         return scheduler
 
 class SingleSessionModule(Autoencoder_Models):
