@@ -93,7 +93,7 @@ class Autoencoder_Models(pl.LightningModule):
                 "frequency":1,
                 "name": "learning_rate",
                 }
-            scheduler = ChainedScheduler([linear_scheduler,step_scheduler],optimizer=optimizer)
+            scheduler = ChainedScheduler(optimizer=optimizer,schedulers=[linear_scheduler,step_scheduler])
         return scheduler
 
 class SingleSessionModule(Autoencoder_Models):
