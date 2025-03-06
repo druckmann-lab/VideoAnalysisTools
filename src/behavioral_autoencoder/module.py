@@ -69,7 +69,7 @@ class Autoencoder_Models(pl.LightningModule):
         elif self.hparams["train_config"]["scheduler"] == "step":    
             scheduler = {
                 "scheduler": torch.optim.lr_scheduler.MultiStepLR(
-                    optimizer, milestones = [60,120,160], gamma = 0.1, last_epoch=-1
+                    optimizer, milestones = [10,20,30], gamma = 0.1, last_epoch=-1
                 ),
                 "interval": "epoch",
                 "frequency":1,
