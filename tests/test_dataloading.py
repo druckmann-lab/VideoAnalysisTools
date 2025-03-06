@@ -97,7 +97,7 @@ class Test_SessionFramesDataModule():
                 "extension":".png",
                 "trial_pattern":None
                 }
-        sfdm = SessionFramesDataModule(data_config,10,2,10,1)
+        sfdm = SessionFramesDataModule(data_config,10,2,10,1,10,1)
         assert sfdm.mean_image.shape == (1,crop_config["target_h"],crop_config["target_w"])
 
     def test_train_dataloader(self,tmp_path):
@@ -119,7 +119,8 @@ class Test_SessionFramesDataModule():
                 "extension":".png",
                 "trial_pattern":None
                 }
-        sfdm = SessionFramesDataModule(data_config,10,2,10,1,)
+        sfdm = SessionFramesDataModule(data_config,10,2,10,1,10,1)
+        sfdm.setup("train")
         dataloader = sfdm.train_dataloader()
         
         for batch in dataloader:

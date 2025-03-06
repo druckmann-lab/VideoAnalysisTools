@@ -17,6 +17,19 @@ def get_all_predicts_latents(trained_model,datamodule,batch_size,num_workers):
     latents = []
     for batch in tqdm(full_dataloader):
         prediction,latent = trained_model(batch)
-        predictions.append(prediction)
+        predictions.append(prediction+full_dataloader.mean_image[None,None,:])
+        latents.append(latent)
+    return torch.concatenate(predictions), torch.concatenate(latents)    
+
+def get_dl_predicts_latents(trained_model,dataloader,mean,batch_size,num_workers):
+    """
+    Get latents for the entire video, having trained on a subsampled set. 
+
+    """
+    predictions = []
+    latents = []
+    for batch in tqdm(dataloader):
+        prediction,latent = trained_model(batch)
+        predictions.append(prediction+mean[None,None,:])
         latents.append(latent)
     return torch.concatenate(predictions), torch.concatenate(latents)    

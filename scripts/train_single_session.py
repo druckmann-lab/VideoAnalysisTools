@@ -12,8 +12,8 @@ import pytorch_lightning as pl
 from behavioral_autoencoder.module import SingleSessionModule
 from behavioral_autoencoder.dataset import CropResizeProportion
 from behavioral_autoencoder.dataloading import SessionFramesDataModule
-from behavioral_autoencoder.eval import get_all_predicts_latents
-from pytorch_lightning.callbacks import ModelCheckpoint
+from behavioral_autoencoder.eval import get_all_predicts_latents,get_dl_predicts_latents
+from pytorch_lightning.callbacks import ModelCheckpoint,LearningRateMonitor
 from pytorch_lightning.loggers import TensorBoardLogger
 
 here = os.path.join(os.path.abspath(os.path.dirname(__file__)))
@@ -62,7 +62,10 @@ def main(model_config_path, train_config_path, data_path, data_config_path):
             train_config["batch_size"],
             train_config["num_workers"],
             train_config["subsample_rate"],
-            train_config["subsample_offset"])
+            train_config["subsample_offset"],
+            train_config["val_subsample_rate"],
+            train_config["val_subsample_offset"]
+            )
 
     ## Set up logging and trainer
     print("\nSetting up logging and checkpoints...")
@@ -74,7 +77,8 @@ def main(model_config_path, train_config_path, data_path, data_config_path):
     print(f"Predictions will be saved to: {timestamp_pred}")
     
     logger = TensorBoardLogger("tb_logs",name="test_single_session_auto",log_graph=True)
-    checkpoint = ModelCheckpoint(monitor="mse/val", mode="max", save_last=False, dirpath=timestamp_model)
+    checkpoint = ModelCheckpoint(monitor="mse/val", mode="min", save_last=True, dirpath=timestamp_model)
+    lr_monitor = LearningRateMonitor(logging_interval='epoch')
 
     print("\nInitializing trainer...")
     trainer = pl.Trainer(
@@ -82,7 +86,7 @@ def main(model_config_path, train_config_path, data_path, data_config_path):
         max_epochs=train_config["max_epochs"],
         accelerator=train_config["accelerator"],
         enable_checkpointing=True,
-        callbacks=[checkpoint],
+        callbacks=[checkpoint,lr_monitor],
         log_every_n_steps=1,
         logger=logger,
         enable_progress_bar=True,
@@ -95,7 +99,7 @@ def main(model_config_path, train_config_path, data_path, data_config_path):
 
     ## Get out predictions 
     print("\nGenerating predictions and latents...")
-    preds,latents = get_all_predicts_latents(ssm,sfdm,train_config["batch_size"],train_config["num_workers"])
+    preds,latents = get_dl_predicts_latents(ssm,sfdm.val_dataloader(),sfdm.mean_image,train_config["batch_size"],train_config["num_workers"])
 
     ## Save out all relevant metadata
     print("\nSaving results...")
