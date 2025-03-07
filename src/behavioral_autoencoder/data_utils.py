@@ -64,7 +64,7 @@ def check_exists(frame_dir: Path) -> bool:
         return response == "y"
     return True
 
-def main(video_dir,frame_dir,video_suffix=".avi"):
+def main(video_dir,frame_dir,video_suffix=".avi",match_str=None):
     """Given a directory of videos, write to a different directory with the following structure:
         1. one subdirectory per video file, as well as a metadata file `annotations.txt`.
         2. within each subdirectory, pngs per individual frames.
@@ -76,12 +76,15 @@ def main(video_dir,frame_dir,video_suffix=".avi"):
             video_dir: directory containing video files. 
             frame_dir: directory to write frames to. 
             video_suffix (default=".avi"): suffix of video files to consider. 
+            match_str: string to find within the video names to write only a subset. 
     """
     video_dir = Path(video_dir)
     frame_dir = Path(frame_dir)
     # 1. Get a directory which contains video files. Store video file names.  
     video_files = os.listdir(video_dir)
     video_files = [f for f in video_files if f.endswith(video_suffix)]
+    if match_str is not None:
+        video_files = [f for f in video_files if match_str in f]
     # 2. Check that the directory we care about exists. If it doesn't create. If it does, ask user.  
     video_files_write = []
     for video_file in video_files:
