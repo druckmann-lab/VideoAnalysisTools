@@ -82,12 +82,13 @@ class Autoencoder_Models(pl.LightningModule):
                         total_iters=self.hparams["train_config"]["warmup_steps"]
                         )
             step_scheduler = torch.optim.lr_scheduler.MultiStepLR(
-                    optimizer, milestones = [7500,15000,22500], gamma = 0.1, last_epoch=-1
+                        optimizer, milestones = [7500,15000,22500], gamma = 0.1, last_epoch=-1)
             scheduler = {
                 "scheduler":ChainedScheduler(optimizer=optimizer,schedulers=[linear_scheduler,step_scheduler]),
-                "interval": "epoch",
+                "interval": "step",
                 "frequency": 1,
                 "name": "learning_rate"
+                }
         return scheduler
 
 class SingleSessionModule(Autoencoder_Models):
