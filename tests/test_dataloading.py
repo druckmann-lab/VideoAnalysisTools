@@ -120,7 +120,7 @@ class Test_SessionFramesDataModule():
                 "trial_pattern":None
                 }
         sfdm = SessionFramesDataModule(data_config,10,2,10,1,10,1)
-        sfdm.setup("train")
+        sfdm.setup("fit")
         dataloader = sfdm.train_dataloader()
         
         for batch in dataloader:

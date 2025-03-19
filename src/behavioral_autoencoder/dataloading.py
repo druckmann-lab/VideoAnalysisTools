@@ -3,7 +3,7 @@ from tqdm import tqdm
 import numpy as np
 import torch
 from torch.utils.data import Subset,DataLoader
-from behavioral_autoencoder.dataset import SessionFramesTorchvision,CropResizeProportion
+from behavioral_autoencoder.dataset import SessionFramesTorchvision,SessionSequenceTorchvision,CropResizeProportion
 import pytorch_lightning as pl
 from joblib import Memory
 import os
@@ -76,7 +76,7 @@ class SessionFramesDataModule(pl.LightningDataModule):
             whether we should calculate and subtract the mean of the training set.
         """
         super().__init__()
-        self.data_path = dataset_config.pop("data_path")
+        self.data_path = dataset_config.pop("data_path") ## each dataset does not take this argument, so we remove. 
         self.dataset_config = dataset_config
         self.batch_size = batch_size
         self.num_workers = num_workers
@@ -109,15 +109,19 @@ class SessionFramesDataModule(pl.LightningDataModule):
         return x-self.mean_image
 
     def setup(self,stage):
-        _ = self.dataset_config.pop("transform")
-        self.dataset = SessionFramesTorchvision(self.data_path,transform = self.transform,**self.dataset_config)
-        all_indices = np.arange(len(self.dataset))
-        ## Subsample indices
-        train_inds = all_indices[self.train_subsample_offset::self.train_subsample_rate]
-        val_inds = all_indices[self.val_subsample_offset::self.val_subsample_rate]
-        #test_inds = [i for i in all_indices if not (i in train_inds)]
-        self.trainset = Subset(self.dataset,train_inds)
-        self.valset = Subset(self.dataset,val_inds)
+        if stage == "fit":
+            _ = self.dataset_config.pop("transform")
+            self.dataset = SessionFramesTorchvision(self.data_path,transform = self.transform,**self.dataset_config)
+            all_indices = np.arange(len(self.dataset))
+            ## Subsample indices
+            train_inds = all_indices[self.train_subsample_offset::self.train_subsample_rate]
+            val_inds = all_indices[self.val_subsample_offset::self.val_subsample_rate]
+            #test_inds = [i for i in all_indices if not (i in train_inds)]
+            self.trainset = Subset(self.dataset,train_inds)
+            self.valset = Subset(self.dataset,val_inds)
+        if stage == "test":    
+            ### the only way to access  this right now is to pass setup explicitly right now. 
+            self.dataset = SessionSequenceTorchvision(self.data_path,transform = self.transform,**self.dataset_config)
 
     def train_dataloader(self,shuffle=True):
         dataloader = DataLoader(
