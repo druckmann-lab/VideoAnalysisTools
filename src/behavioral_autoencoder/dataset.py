@@ -364,7 +364,7 @@ class SessionSequenceTorchvision(Dataset):
         """
         return np.sum(self.trial_lengths)
 
-    def __getitem__(self, idx, method = "searchsorted"):
+    def __getitem__(self, trial_idx, method = "searchsorted"):
         """
         Get all frames which match a given
 
@@ -374,10 +374,6 @@ class SessionSequenceTorchvision(Dataset):
             integer index into the data. 
         """
         ## get trial number
-        if method == "argmax":
-            trial_idx = np.argmax(self.cumsum_n_trials > idx)
-        elif method == "searchsorted":    
-            trial_idx = np.searchsorted(self.cumsum_n_trials, idx, side='right')
 
         batch = []
         for frame in self.frame_dict[self.trial_folders[trial_idx]]:

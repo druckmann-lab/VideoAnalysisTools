@@ -14,7 +14,10 @@ def calculate_mean_image(data_path,dataset_config,subsample_rate,subsample_offse
     TODO: implement caching for this function. 
     """
     # 1. First construct the right training set indices: 
-    dataset = SessionFramesTorchvision(data_path,**dataset_config)
+    sub_dataset = {}
+    for field in ["transform","extension","trial_pattern"]:
+        sub_dataset[field] = dataset_config[field]
+    dataset = SessionFramesTorchvision(data_path,**sub_dataset)
     all_indices = np.arange(len(dataset))
     ## Subsample indices
     train_inds = all_indices[subsample_offset::subsample_rate]
@@ -121,6 +124,7 @@ class SessionFramesDataModule(pl.LightningDataModule):
             self.valset = Subset(self.dataset,val_inds)
         if stage == "test":    
             ### the only way to access  this right now is to pass setup explicitly right now. 
+            _ = self.dataset_config.pop("transform")
             self.dataset = SessionSequenceTorchvision(self.data_path,transform = self.transform,**self.dataset_config)
 
     def train_dataloader(self,shuffle=True):
