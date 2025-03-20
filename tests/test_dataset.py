@@ -2,7 +2,7 @@
 Test functions within the dataset class.
 Uses test data inside `test_data` folder. 
 """
-from behavioral_autoencoder.dataset import SessionFramesDataset,SessionFramesTorchvision,CropResizeProportion
+from behavioral_autoencoder.dataset import SessionFramesDataset,SessionFramesTorchvision,SessionSequenceTorchvision,CropResizeProportion
 import pytest
 import numpy as np
 import time
@@ -262,6 +262,41 @@ class Test_SessionFramesDataset:
             result_searchsorted = dataset.__getitem__(idx, method="searchsorted")
             assert np.array_equal(result_argmax, result_searchsorted), \
                 f"Methods returned different results for index {idx}"
+
+class Test_SessionSequenceTorchvision:
+    config_path = os.path.join(here,"..","configs","data_configs","alm_side.json")
+    def test_init(self, temp_hierarchical_folder):
+        """Test the SessionFramesTorchvision initialization and basic properties, including with default cropping given by CropResizeProportion with default.
+        
+        Tests:
+        1. Dataset can be initialized
+        2. Number of trials matches fixture
+        3. Image dimensions and format are correct
+        4. Dataset length matches expected total frames
+        """
+        alm_cropping = CropResizeProportion(self.config_path)
+        len_sequence = 3
+        dataset = SessionSequenceTorchvision(temp_hierarchical_folder,transform = alm_cropping,frame_subset = [f"frame_{i:06d}.png" for i in range(len_sequence)])
+
+        # Test number of trials
+        assert len(dataset.trial_folders) == 3, "Should have 3 trials by default"
+        
+        # Test image properties
+        first_image = dataset[0]
+        assert isinstance(first_image, torch.Tensor), "Dataset should return numpy arrays"
+        assert len(first_image.shape) == 4
+        assert first_image.shape[0] == len_sequence, "Sequence dimension should be 0"
+        assert first_image.shape[1] == 1, "Images should be 2D grayscale (H,W)"
+        assert first_image.dtype == torch.float32, "Images should be float32"
+        
+        # Test dataset length
+        expected_length = 3 * len_sequence  # n_trials * n_ims_per_trial
+        assert len(dataset) == expected_length, f"Dataset should have {expected_length} total frames"
+        
+        # Test all images are readable
+        for i in range(3):
+            img = dataset[i]
+            assert img is not None, f"Failed to load sequence at index {i}"
 
 class Test_SessionFramesTorchvision:
     config_path = os.path.join(here,"..","configs","data_configs","alm_side.json")

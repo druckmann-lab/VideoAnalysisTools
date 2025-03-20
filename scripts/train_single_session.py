@@ -68,6 +68,7 @@ def main(model_config_path, train_config_path, data_path, data_config_path):
             train_config["val_subsample_offset"]
             )
 
+    import pdb; pdb.set_trace()
     ## Set up logging and trainer
     print("\nSetting up logging and checkpoints...")
     date=datetime.datetime.now().strftime("%m-%d-%y")
@@ -110,6 +111,7 @@ def main(model_config_path, train_config_path, data_path, data_config_path):
     with open(os.path.join(timestamp_pred,"model_config"),"w") as f:
         json.dump(hparams, f)
     with open(os.path.join(timestamp_pred,"data_config"),"w") as f:
+        data_config["data_path"] = data_path
         json.dump(data_config, f)
 
     print("\n=== Training Complete ===")
