@@ -22,14 +22,14 @@ def main(model_config_path, train_config_path, data_path, data_config_path):
     """This main function takes as input four paths. These paths indicate the model configuration parameters, training configuration parameters, path to the data directory, and cropping configuration, respectively. By default we assume that we are training a single session autoencoder.  
     """
     print("\n=== Starting Single Session Autoencoder Training ===")
-    
+
     ## Model setup 
     print("\nLoading configurations...")
     with open(model_config_path,"r") as f:
         model_config = json.load(f)
     with open(train_config_path,"r") as f:
         train_config = json.load(f)
-    model_name = "single_session_autoencoder"    
+    model_name = "single_session_autoencoder"
 
     print(f"Model config: {model_config}")
     print(f"Training config: {train_config}")
@@ -51,11 +51,12 @@ def main(model_config_path, train_config_path, data_path, data_config_path):
     data_config = {
             "data_path":data_path,
             "transform":alm_cropping,
+            "data_config_path":data_config_path,
             "extension":data_process_config["extension"],
             "trial_pattern":data_process_config["trial_pattern"]
             }
     print(f"Data config: {data_config}")
-    
+
     print("Initializing data module...")
     sfdm = SessionFramesDataModule(
             data_config,
@@ -75,7 +76,7 @@ def main(model_config_path, train_config_path, data_path, data_config_path):
     timestamp_pred = os.path.join(here,"preds",model_name,date,time)
     print(f"Model will be saved to: {timestamp_model}")
     print(f"Predictions will be saved to: {timestamp_pred}")
-    
+
     logger = TensorBoardLogger("tb_logs",name="test_single_session_auto",log_graph=True)
     checkpoint = ModelCheckpoint(monitor="mse/val", mode="min", save_last=True, dirpath=timestamp_model)
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
@@ -110,7 +111,7 @@ def main(model_config_path, train_config_path, data_path, data_config_path):
         json.dump(hparams, f)
     with open(os.path.join(timestamp_pred,"data_config"),"w") as f:
         json.dump(data_config, f)
-    
+
     print("\n=== Training Complete ===")
     print(f"Results saved to: {timestamp_pred}")
 

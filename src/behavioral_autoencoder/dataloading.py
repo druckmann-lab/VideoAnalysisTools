@@ -7,26 +7,57 @@ from behavioral_autoencoder.dataset import SessionFramesTorchvision,CropResizePr
 import pytorch_lightning as pl
 from joblib import Memory
 import os
+import tempfile
+from pathlib import Path
 
-def calculate_mean_image(data_path,dataset_config,subsample_rate,subsample_offset,batch_size,num_workers):
+# Set up cache location with multiple options for flexibility
+def get_cache_dir():
+    """Get cache directory with the following priority:
+    1. BEHAVIORAL_AUTOENCODER_CACHE env variable if set
+    2. Project's .cache directory if in development mode
+    3. User's home directory under ~/.cache/behavioral_autoencoder
+    4. System temp directory as fallback
     """
-    Calculate mean image from given training set parameters. Gets parameters from SessionFramesDataModule
-    TODO: implement caching for this function. 
+    # Option 1: Environment variable (highest priority)
+    if "BEHAVIORAL_AUTOENCODER_CACHE" in os.environ:
+        cache_dir = Path(os.environ["BEHAVIORAL_AUTOENCODER_CACHE"])
+    
+    # Option 2: Project directory if it exists (development mode)
+    elif (Path(__file__).parent.parent.parent / ".cache").exists():
+        cache_dir = Path(__file__).parent.parent.parent / ".cache"
+    
+    # Option 3: User's home directory
+    else:
+        home_dir = Path.home()
+        cache_dir = home_dir / ".cache" / "behavioral_autoencoder"
+    
+    # Create directory if it doesn't exist
+    os.makedirs(cache_dir, exist_ok=True)
+    return cache_dir
+
+# Initialize memory cache
+memory = Memory(location=get_cache_dir(), verbose=1)
+
+@memory.cache
+def calculate_mean_image(data_path, dataset_config, subsample_rate, subsample_offset, batch_size, num_workers):
+    """
+    Calculate mean image from given training set parameters. 
+    This function is cached to avoid redundant calculations.
     """
     # 1. First construct the right training set indices: 
-    dataset = SessionFramesTorchvision(data_path,**dataset_config)
+    dataset = SessionFramesTorchvision(data_path, **dataset_config)
     all_indices = np.arange(len(dataset))
     ## Subsample indices
     train_inds = all_indices[subsample_offset::subsample_rate]
-    trainset = Subset(dataset,train_inds)
+    trainset = Subset(dataset, train_inds)
 
     ## use dataloader to compute sum image 
-    trainloader = DataLoader(trainset,batch_size=batch_size,num_workers=num_workers)
+    trainloader = DataLoader(trainset, batch_size=batch_size, num_workers=num_workers)
 
     sum_im = torch.zeros(dataset[0].shape[1:]) ## should be 
     for data in tqdm(trainloader):
-        sum_im+=data.sum(axis=0).sum(axis=0) ## sum across the batch and sequence dimensions.
-    mean=sum_im/len(trainset)    
+        sum_im += data.sum(axis=0).sum(axis=0) ## sum across the batch and sequence dimensions.
+    mean = sum_im / len(trainset)    
     return mean
 
 class SessionFramesDataModule(pl.LightningDataModule):
