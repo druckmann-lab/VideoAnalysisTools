@@ -9,6 +9,7 @@ import numpy as np
 import cv2
 from PIL import Image
 from torchvision.io import read_image
+import torch
 import torchvision.transforms.functional as F
 import os
 import json
@@ -94,6 +95,7 @@ class SessionFramesDataset(Dataset):
         number of frames within each trial dictionary
     cumsum_n_trials : arraylike    
         cumulative index for frame index across all trials. 
+
 
     """
 
@@ -277,6 +279,114 @@ class CropResizeProportion:
         img = F.crop(img, y_top, x_left, y_bottom - y_top, x_right-x_left)
         return img
 
+class SessionSequenceTorchvision(Dataset):
+    """Quite similar to SessionFramesTorchvision, but returns a whole sequence of frames instead of the single frame. 
+
+    Attributes
+    ----------
+    base_folder : str
+        given by parameter at initialization
+    trial_folders : arraylike    
+        sorted names of per-trial directories 
+    extension : str    
+        extension for frame files.
+    frame_dict : dict    
+        dictionary with keys given by trial_folder names, and entries arraylikes of frames within each folder.  
+    trial_lengths : list    
+        number of frames within each trial dictionary
+    cumsum_n_trials : arraylike    
+        cumulative index for frame index across all trials. 
+    transform : any    
+        None or transform function 
+    frame_subset : any    
+        The indices of frames which we will extract from each trial. If not given, will extract all frames for each trial in each batch.    
+    """
+    def __init__(self, base_folder, extension=".png", trial_pattern=None, transform = None, frame_subset=None):
+        """
+        Parameters
+        ----------
+        base_folder : string
+            path to the base folder which contains folders for each individual trial. 
+        extension : string
+            file extension for frame files (default: ".png")
+        crop_info : dict    
+            cropping information to be passed to `transform_image`, with one expected key, `h_coord`. 
+            Crops out the image in the original space so that ~h_coord pixels to the right of the 
+            image would be cropped following appropriate image transformation. 
+        trial_pattern : string, optional
+            Regular expression pattern to match trial folders. If None, all directories are considered
+            trial folders. Example: r"^\d+_trial$" would match folders like "0_trial", "1_trial", etc.
+        frame_subset : any    
+            Array like of filenames for frames to extract from each trial. If not given, extracts all frames fr each trial in a single batch. 
+            
+        """
+        self.base_folder = base_folder
+        self.extension = extension
+        self.frame_subset = frame_subset
+        
+        # Get all items in the base folder
+        all_items = os.listdir(base_folder)
+        
+        # Filter for directories only
+        self.trial_folders = [
+            item for item in all_items 
+            if os.path.isdir(os.path.join(base_folder, item))
+        ]
+        
+        # Apply regex pattern if provided
+        if trial_pattern is not None:
+            pattern = re.compile(trial_pattern)
+            self.trial_folders = [
+                folder for folder in self.trial_folders 
+                if pattern.match(folder)
+            ]
+        
+        self.trial_folders = np.sort(self.trial_folders)
+        
+        self.frame_dict = {folder: np.sort(self.filter_frames(base_folder,folder)) for folder in self.trial_folders}
+        self.trial_lengths = [len(self.frame_dict[folder]) for folder in self.trial_folders]
+        self.cumsum_n_trials = np.cumsum(self.trial_lengths)
+        self.transform = transform
+
+    def filter_frames(self,base_folder,folder):
+        """
+        Given a trial folder, filters out extra files to return only those with a given extension, and matching a given frame subset names. . 
+        """
+        candidates = os.listdir(os.path.join(base_folder,folder))
+        if self.frame_subset is None:
+            return [f for f in candidates if f.endswith(self.extension)]
+        else:
+            return [f for f in candidates if f.endswith(self.extension) and (f in self.frame_subset)]
+
+    def __len__(self):
+        """
+        Required method for pytorch datasets. 
+        """
+        return np.sum(self.trial_lengths)
+
+    def __getitem__(self, trial_idx, method = "searchsorted"):
+        """
+        Get all frames which match a given
+
+        Parameters 
+        ----------
+        idx: int
+            integer index into the data. 
+        """
+        ## get trial number
+
+        batch = []
+        for frame in self.frame_dict[self.trial_folders[trial_idx]]:
+            image_path = os.path.join(
+                    self.base_folder,
+                    self.trial_folders[trial_idx],
+                    frame)
+            img = Image.open(image_path)
+            if self.transform:
+                img = self.transform(img)
+            batch.append(img[None,:])    
+        return torch.cat(batch,dim=0)    
+
 class SessionFramesTorchvision(Dataset): 
     """Essentially the same as SessionFramesDataset above, but factors out image transformations into a separate class. 
     Assumes we have a dataset which is organized as a directory of directories, with one directory per trial.
@@ -299,9 +409,11 @@ class SessionFramesTorchvision(Dataset):
         cumulative index for frame index across all trials. 
     transform : any    
         None or transform function 
+    seq_length : int    
+        we end up outputting data which has a sequence dimension for consistency with other implementations as a singleton dimension preceding the others. 
     """
 
-    def __init__(self, base_folder, extension=".png", trial_pattern=None, transform = None):
+    def __init__(self, base_folder, extension=".png", trial_pattern=None, transform = None, seq_length = 1):
         """
         Parameters
         ----------
@@ -319,6 +431,8 @@ class SessionFramesTorchvision(Dataset):
         """
         self.base_folder = base_folder
         self.extension = extension
+        self.seq_length = seq_length
+        assert seq_length == 1, "can't do more than this. "
         
         # Get all items in the base folder
         all_items = os.listdir(base_folder)
@@ -386,6 +500,6 @@ class SessionFramesTorchvision(Dataset):
         img = Image.open(image_path)
         if self.transform:
             img = self.transform(img)
-        return img
+        return img[None,:]
 
 
