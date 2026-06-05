@@ -1,0 +1,40 @@
+{
+    "data": {
+        "data_path": "/home/kurgyis/Research/VideoAnalysisTools/data/kd115_twNew_20221206_115814/side",
+        "image_height": 120,
+        "image_width": 112,
+        "crop_top": 0,
+        "crop_bottom": 80,
+        "crop_left": 100,
+        "crop_right": 0
+    },
+    "model": {
+        "num_blocks": 2,
+        "in_channels_0": 1,
+        "out_channels_0": 16,
+        "in_channels_1": 16,
+        "out_channels_1": 32,
+        "kernel_preconv": 3,
+        "stride_preconv": 1,
+        "pool_size_preconv_0": 2,
+        "pool_size_preconv_1": 4,
+        "use_batch_norm_preconv": false,
+        "kernel_residual": 3,
+        "stride_residual": 1,
+        "use_batch_norm_residual": false,
+        "pool_size_residual_0": null,
+        "pool_size_residual_1": 4,
+        "n_layers_residual": 3,
+        "out_conv": 288,
+        "out_linear": 128,
+        "embed_size": 16,
+        "use_batch_norm_linear": false,
+        "image_height": 120,
+        "image_width": 112
+    },
+    "training": {
+        "batch_size": 32,
+        "learning_rate": 1e-3,
+        "checkpoint_dir": "./checkpoints"
+    }
+}
