@@ -1,0 +1,28 @@
+{
+    "metadata_config": {
+        "bpod_folder": null,
+        "h5_folder": null
+    },
+    "dataset": {
+        "frame_selection_method": "frame_subsample",
+        "train_nth_frame": 10,
+        "subtract_mean_frame": true,
+        "mean_frame_path": null,
+        "dataset_path": null
+    },
+    "data": {
+        "data_path": null
+    },
+    "model": {
+    },
+    "training": {
+        "batch_size": 512,
+        "learning_rate": 1e-3,
+        "latent_lambda": 1e-3,
+        "epochs": 25000,
+        "lr_scheduler": "ReduceLROnPlateau",
+        "checkpoint_dir": "./checkpoints/",
+        "checkpoint_interval": 500,
+        "save_best_model": true
+    }
+}

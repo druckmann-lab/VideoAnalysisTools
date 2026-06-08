@@ -1,6 +1,36 @@
 {
+    "metadata_config": {
+        "behavior_channel_map" : {
+            "outcome": 0,
+            "trial_type": 1,
+            "early_lick_sample": 2,
+            "early_lick_delay": 3,
+            "airpuff": 4,
+            "autowater": 5,
+            "water_volume": 6,
+            "trial_length": 7,
+            "z_pos": 8,
+            "laser_power": 9,
+            "n_licks": 11,
+            "protocol": 12,
+            "reaction_time": 14,
+            "sample_start": 15,
+            "delay_start": 16,
+            "go_time": 17,
+            "reward_time": 18,
+            "freewater_outcome": 19,
+            "reward1": 20
+        },
+        "stratification_columns" : ["outcome", "trial_type", "airpuff"],
+        "split_random_seed": 42
+    },
+    "dataset": {
+        "frame_selection_method": "frame_subsample",
+        "train_nth_frame": 10,
+        "subtract_mean_frame": true,
+        "mean_frame_path": null
+    },
     "data": {
-        "data_path": "/home/kurgyis/Research/VideoAnalysisTools/data/kd115_twNew_20221206_115814/side",
         "image_height": 120,
         "image_width": 112,
         "crop_top": 0,
@@ -35,9 +65,10 @@
     "training": {
         "batch_size": 32,
         "learning_rate": 1e-3,
-        "latent_lambda": 1e-4,
+        "latent_lambda": 1e-3,
         "epochs": 50,
         "lr_scheduler": "ReduceLROnPlateau",
-        "checkpoint_dir": "/home/kurgyis/Research/VideoAnalysisTools/data/checkpoints/"
+        "checkpoint_interval": 500,
+        "save_best_model": true
     }
 }

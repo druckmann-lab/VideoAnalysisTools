@@ -1,0 +1,28 @@
+{
+    "metadata_config": {
+        "bpod_folder": "/home/kurgyis/Research/SpatialTranscriptomics/data/2p/",
+        "h5_folder": "/home/kurgyis/Research/VideoAnalysisTools/data/"
+    },
+    "dataset": {
+        "frame_selection_method": "frame_subsample",
+        "train_nth_frame": 10,
+        "subtract_mean_frame": true,
+        "mean_frame_path": null,
+        "dataset_path": "/home/kurgyis/Research/VideoAnalysisTools/data/kd115_twNew_20221206_115814/kd115_twNew_20221206_115814_side_mini.h5"
+    },
+    "data": {
+        "data_path": "/home/kurgyis/Research/VideoAnalysisTools/data/kd115_twNew_20221206_115814/side"
+    },
+    "model": {
+    },
+    "training": {
+        "batch_size": 32,
+        "learning_rate": 1e-3,
+        "latent_lambda": 1e-3,
+        "epochs": 2,
+        "lr_scheduler": "ReduceLROnPlateau",
+        "checkpoint_dir": "/home/kurgyis/Research/VideoAnalysisTools/data/checkpoints/",
+        "checkpoint_interval": 500,
+        "save_best_model": true
+    }
+}
