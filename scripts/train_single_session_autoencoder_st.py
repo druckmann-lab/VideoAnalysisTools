@@ -69,8 +69,20 @@ if __name__ == "__main__":
     train_dataset = H5VideoDataset(config['dataset']['dataset_path'], trial_split_df, split='train', config=config['dataset'])
     val_dataset = H5VideoDataset(config['dataset']['dataset_path'], trial_split_df, split='test', config=config['dataset'])
 
-    train_loader = DataLoader(train_dataset, batch_size=config['training']['batch_size'], shuffle=True, num_workers=4)
-    val_loader = DataLoader(val_dataset, batch_size=config['training']['batch_size'], shuffle=False, num_workers=4)
+    train_loader = DataLoader(train_dataset, 
+                              batch_size=config['training']['batch_size'], 
+                              shuffle=True, 
+                              num_workers=8, 
+                              pin_memory=True,
+                              prefetch_factor=2,
+                              persistent_workers=True)
+    val_loader = DataLoader(val_dataset, 
+                            batch_size=config['training']['batch_size'], 
+                            shuffle=False, 
+                            num_workers=8, 
+                            pin_memory=True,
+                            prefetch_factor=2,
+                            persistent_workers=True)
 
     # Initialize Model and Run Trainer
     model = AutoEncoder(config['model'])
