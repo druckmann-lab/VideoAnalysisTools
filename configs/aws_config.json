@@ -1,14 +1,14 @@
 {
     "metadata_config": {
-        "bpod_folder": null,
-        "h5_folder": null
+        "bpod_folder": "/home/ubuntu/VideoAnalysisTools/data/bpod_files/",
+        "h5_folder": "/home/ubuntu/VideoAnalysisTools/data/video_data/"
     },
     "dataset": {
         "frame_selection_method": "frame_subsample",
         "train_nth_frame": 10,
         "subtract_mean_frame": true,
         "mean_frame_path": null,
-        "dataset_path": null
+        "dataset_path": "/home/ubuntu/VideoAnalysisTools/data/video_data/kd115_twNew_20221206_115814_side.h5"
     },
     "data": {
         "data_path": null
@@ -21,7 +21,7 @@
         "latent_lambda": 1e-3,
         "epochs": 25000,
         "lr_scheduler": "ReduceLROnPlateau",
-        "checkpoint_dir": "./checkpoints/",
+        "checkpoint_dir": "/home/ubuntu/VideoAnalysisTools/data/checkpoints/",
         "checkpoint_interval": 500,
         "save_best_model": true
     }
