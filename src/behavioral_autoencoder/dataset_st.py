@@ -122,6 +122,13 @@ class H5VideoDataset(Dataset):
         self.h5_path = h5_path
         self.split = split
         self.config = config or {}
+
+        print("Loading dataset into RAM...")
+        with h5py.File(self.h5_path, 'r') as f:
+            self.frames = torch.from_numpy(
+                f['frames'][:]).float() / 255.0   # shape: (N, H, W), lives in RAM
+            self.trial_ids_arr = f['trial_ids'][:]
+        print(f"Loaded {len(self.frames)} frames into RAM")
         
         # Extract valid video trial IDs
         self.valid_trial_ids = valid_trials_df['video_trial_id'].dropna().unique()
@@ -146,9 +153,10 @@ class H5VideoDataset(Dataset):
         Constructs a list of actual HDF5 indices to sample from based on config.
         """
         # Open temporarily just to read the trial IDs
-        with h5py.File(self.h5_path, 'r') as h5f:
-            h5_trial_ids = h5f['trial_ids'][:]
-            
+        #with h5py.File(self.h5_path, 'r') as h5f:
+        #    h5_trial_ids = h5f['trial_ids'][:]
+        h5_trial_ids = self.trial_ids_arr
+
         split_method = self.config.get('frame_selection_method', 'frame_subsample')
         
         if split_method == 'frame_subsample':
@@ -219,17 +227,17 @@ class H5VideoDataset(Dataset):
 
     def __getitem__(self, idx):
         # 1. LAZY LOADING for multiprocessing safety
-        if self.h5_file is None:
-            self.h5_file = h5py.File(self.h5_path, 'r')
+        #if self.h5_file is None:
+        #    self.h5_file = h5py.File(self.h5_path, 'r')
         
         # 2. Map dataset index to original H5 frame index
         h5_idx = self.frame_indices[idx]
         
         # 3. Read frame from disk
-        frame = self.h5_file['frames'][h5_idx]
+        #frame = self.h5_file['frames'][h5_idx]
         
         # 4. Convert and normalize -> [0.0, 1.0]
         # Make sure our bytes become float tensors
-        frame_tensor = torch.from_numpy(frame).float() / 255.0
+        #frame_tensor = torch.from_numpy(frame).float() / 255.0
         
-        return frame_tensor - self.mean_frame
+        return self.frames[h5_idx] - self.mean_frame
