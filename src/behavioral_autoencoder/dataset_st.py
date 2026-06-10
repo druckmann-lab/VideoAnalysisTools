@@ -126,7 +126,7 @@ class H5VideoDataset(Dataset):
         print("Loading dataset into RAM...")
         with h5py.File(self.h5_path, 'r') as f:
             self.frames = torch.from_numpy(
-                f['frames'][:]).float() / 255.0   # shape: (N, H, W), lives in RAM
+                f['frames'][:])   # shape: (N, H, W), lives in RAM
             self.trial_ids_arr = f['trial_ids'][:]
         print(f"Loaded {len(self.frames)} frames into RAM")
         
@@ -240,4 +240,4 @@ class H5VideoDataset(Dataset):
         # Make sure our bytes become float tensors
         #frame_tensor = torch.from_numpy(frame).float() / 255.0
         
-        return self.frames[h5_idx] - self.mean_frame
+        return self.frames[h5_idx].float() / 255.0 - self.mean_frame
