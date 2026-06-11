@@ -183,6 +183,16 @@ if __name__ == "__main__":
 
             if args.save_recons:
                 # Squeeze back to (bs, H, W) for compact storage
+                recon = x_recon + mean_frame
+                print(x_recon.min(), x_recon.max(), x_recon.mean())
+                print(recon.min(), recon.max(), recon.mean())
+                recon = recon.clamp(0, 1) * 255
+                print(recon.min(), recon.max(), recon.mean())
+                recon = recon.to(torch.uint8).squeeze()  # (bs, H, W) or (H, W) if bs=1
+                print(recon.min(), recon.max(), recon.mean())
+                recon = recon.cpu().numpy()
+                print(recon.min(), recon.max(), recon.mean())
+
                 recon = ((x_recon + mean_frame).clamp(0, 1) * 255).to(torch.uint8).squeeze().cpu().numpy()
                 if recon.ndim == 2:         # edge case: batch_size=1
                     recon = recon[np.newaxis]
