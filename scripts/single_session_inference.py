@@ -93,7 +93,11 @@ if __name__ == "__main__":
     print(f"Loading checkpoint: {args.checkpoint}")
     checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=False)
 
-    model_config = checkpoint['config']['model']
+    #model_config = checkpoint['config']['model']
+    # temporary fix for loading the config
+    config = load_config(args.env)
+    model_config = config['model']
+
     model = AutoEncoder(model_config)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.to(device)
@@ -111,7 +115,7 @@ if __name__ == "__main__":
         print("No mean frame found in checkpoint — will not subtract mean.")
 
     # ── 3. Build dataset (split='all') ───────────────────────────────────────
-    config = load_config(args.env)
+    
 
     metadata_handler = SessionMetadataHandler(
         config=config['metadata_config'],
