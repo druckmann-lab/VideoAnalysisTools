@@ -91,7 +91,7 @@ if __name__ == "__main__":
 
     # ── 1. Load checkpoint ───────────────────────────────────────────────────
     print(f"Loading checkpoint: {args.checkpoint}")
-    checkpoint = torch.load(args.checkpoint, map_location=device)
+    checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=False)
 
     model_config = checkpoint['config']['model']
     model = AutoEncoder(model_config)
