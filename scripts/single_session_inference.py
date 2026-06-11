@@ -176,7 +176,7 @@ if __name__ == "__main__":
 
             if args.save_recons:
                 # Squeeze back to (bs, H, W) for compact storage
-                recon = (x_recon.clamp(0, 1) * 255).to(torch.uint8).squeeze().cpu().numpy()
+                recon = ((x_recon + mean_frame).clamp(0, 1) * 255).to(torch.uint8).squeeze().cpu().numpy()
                 if recon.ndim == 2:         # edge case: batch_size=1
                     recon = recon[np.newaxis]
                 all_recons.append(recon)
