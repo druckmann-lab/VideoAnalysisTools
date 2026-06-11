@@ -176,7 +176,7 @@ if __name__ == "__main__":
 
             if args.save_recons:
                 # Squeeze back to (bs, H, W) for compact storage
-                recon = x_recon.squeeze().cpu().numpy()
+                recon = (x_recon.clamp(0, 1) * 255).to(torch.uint8).squeeze().cpu().numpy()
                 if recon.ndim == 2:         # edge case: batch_size=1
                     recon = recon[np.newaxis]
                 all_recons.append(recon)
@@ -217,7 +217,7 @@ if __name__ == "__main__":
 
     # ── 7. Save latents + reconstructions H5 ────────────────────────────────
     if args.save_recons:
-        recons_np = np.concatenate(all_recons, axis=0)          # (N, H, W)
+        recons_np = np.concatenate(all_recons, axis=0, dtype=np.uint8)          # (N, H, W)
         print(f"Reconstructions shape: {recons_np.shape}")
 
         recons_path = os.path.join(args.output_dir, f"{args.session}_latents_recons.h5")
@@ -227,6 +227,7 @@ if __name__ == "__main__":
             f.create_dataset('reconstructions', data=recons_np,  compression='gzip', compression_opts=4)
             f.create_dataset('frame_indices', data=frame_indices, compression='gzip')
             f.create_dataset('trial_ids',     data=trial_ids_out, compression='gzip')
+            f.create_dataset('mean_frame',   data=mean_frame.cpu().numpy(), compression='gzip')
             f.attrs['animal']    = args.animal
             f.attrs['session']   = args.session
             f.attrs['n_frames']  = len(latents_np)
