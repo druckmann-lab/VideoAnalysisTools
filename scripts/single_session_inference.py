@@ -111,6 +111,7 @@ if __name__ == "__main__":
     if checkpoint.get('mean_frame_train') is not None:
         mean_frame = torch.from_numpy(checkpoint['mean_frame_train']).float().to(device)
         print(f"Using training mean frame from checkpoint (shape: {mean_frame.shape})")
+        print(f"Mean frame stats: min={mean_frame.min():.4f}, max={mean_frame.max():.4f}, mean={mean_frame.mean():.4f}")
     else:
         print("No mean frame found in checkpoint — will not subtract mean.")
 
@@ -163,12 +164,17 @@ if __name__ == "__main__":
                 batch = batch - mean_frame
 
             # Trainer unsqueezes to (bs, 1, H, W) → (bs, 1, 1, H, W) for 5-D model input
+            if batch_idx == 0:
+                print(batch.shape)
             if batch.dim() == 3:
                 batch = batch.unsqueeze(1)   # (bs, 1, H, W)
             if batch.dim() == 4:
                 batch = batch.unsqueeze(1)   # (bs, 1, 1, H, W)
 
             x_recon, z = model(batch)
+            if batch_idx == 0:
+                print(z.shape, x_recon.shape)
+                print(x_recon.min(), x_recon.max(), x_recon.mean())
             # z shape:       (bs, seq_len, latent_dim)  or  (bs, latent_dim)
             # x_recon shape: same as input
 
