@@ -175,6 +175,7 @@ if __name__ == "__main__":
             if batch_idx == 0:
                 print(z.shape, x_recon.shape)
                 print(x_recon.min(), x_recon.max(), x_recon.mean())
+                print((x_recon + mean_frame).min(), (x_recon + mean_frame).max(), (x_recon + mean_frame).mean())
             # z shape:       (bs, seq_len, latent_dim)  or  (bs, latent_dim)
             # x_recon shape: same as input
 
