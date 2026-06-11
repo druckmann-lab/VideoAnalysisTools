@@ -158,10 +158,12 @@ if __name__ == "__main__":
         for batch_idx, batch in enumerate(loader):
             # batch shape from dataset: (bs, H, W)  — single-channel grayscale
             batch = batch.to(device)
+            if batch_idx == 0: print('batch',batch.shape, batch.min(), batch.max(), batch.mean())
 
             # Subtract the checkpoint mean frame if available (matches training behaviour)
             if mean_frame is not None:
                 batch = batch - mean_frame
+            if batch_idx == 0: print('batch after mean subtraction', batch.shape, batch.min(), batch.max(), batch.mean())
 
             # Trainer unsqueezes to (bs, 1, H, W) → (bs, 1, 1, H, W) for 5-D model input
             if batch_idx == 0:
@@ -183,15 +185,18 @@ if __name__ == "__main__":
 
             if args.save_recons:
                 # Squeeze back to (bs, H, W) for compact storage
+                
                 recon = x_recon + mean_frame
-                print(x_recon.min(), x_recon.max(), x_recon.mean())
-                print(recon.min(), recon.max(), recon.mean())
+                if batch_idx == 0: print(x_recon.min(), x_recon.max(), x_recon.mean())
+                if batch_idx == 0: print(recon.min(), recon.max(), recon.mean())
                 recon = recon.clamp(0, 1) * 255
-                print(recon.min(), recon.max(), recon.mean())
+                if batch_idx == 0: print(recon.min(), recon.max(), recon.mean())
                 recon = recon.to(torch.uint8).squeeze()  # (bs, H, W) or (H, W) if bs=1
-                print(recon.min(), recon.max(), recon.mean())
+                if batch_idx == 0: print(recon.min(), recon.max(), recon.mean())
                 recon = recon.cpu().numpy()
-                print(recon.min(), recon.max(), recon.mean())
+                if batch_idx == 0: 
+                    print(recon.shape, recon.dtype)
+                    print(recon.min(), recon.max(), recon.mean())
 
                 recon = ((x_recon + mean_frame).clamp(0, 1) * 255).to(torch.uint8).squeeze().cpu().numpy()
                 if recon.ndim == 2:         # edge case: batch_size=1
