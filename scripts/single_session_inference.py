@@ -196,7 +196,7 @@ if __name__ == "__main__":
                 recon = recon.cpu().numpy()
                 if batch_idx == 0: 
                     print(recon.shape, recon.dtype)
-                    print(recon.min(), recon.max(), recon.float().mean())
+                    print(recon.min(), recon.max(), recon.mean())
 
                 #recon = ((x_recon + mean_frame).clamp(0, 1) * 255).to(torch.uint8).squeeze().cpu().numpy()
                 if recon.ndim == 2:         # edge case: batch_size=1
