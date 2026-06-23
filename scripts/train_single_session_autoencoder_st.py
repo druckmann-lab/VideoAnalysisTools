@@ -92,7 +92,7 @@ if __name__ == "__main__":
     # Initialize Model and Run Trainer
     model = AutoEncoder(config['model'])
 
-    date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    date_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     save_folder = config['training']['checkpoint_dir'] + f"{animal}/{session}_{date_str}/"
     os.makedirs(save_folder, exist_ok=True)
     config['training']['checkpoint_dir'] = save_folder
