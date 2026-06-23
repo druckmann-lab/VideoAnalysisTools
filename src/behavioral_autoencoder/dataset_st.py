@@ -229,7 +229,7 @@ class H5VideoDataset(Dataset):
         h5_idx = self.frame_indices[idx]
         return self.frames[h5_idx].float() / 255.0 - self.mean_frame
     
-    
+
 class H5VideoDatasetSequences(Dataset):
     def __init__(self, h5_path, valid_trials_df, split='train', config=None):
         """
@@ -299,7 +299,9 @@ class H5VideoDatasetSequences(Dataset):
                 
                 train_indices.append(t_train)
                 test_indices.append(t_test)
-                all_indices.append(trial_indices)
+                
+                t_all = trial_indices[0:sequence_num_frames:nth_frame] 
+                all_indices.append(t_all)
                 
             train_sequences = np.array(train_indices) if train_indices else np.array([])
             test_sequences = np.array(test_indices) if test_indices else np.array([])
