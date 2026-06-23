@@ -9,7 +9,7 @@
         "subtract_mean_frame": true,
         "mean_frame_path": null,
         "type": "H5VideoDatasetSequences",
-        "dataset_path": "/home/ubuntu/VideoAnalysisTools/data/video_data/kd115_twNew_20221206_115814_side.h5"
+        "dataset_path": "/opt/dlami/nvme/data/video_data/kd115_twNew_20221206_115814/kd115_twNew_20221206_115814_side.h5"
     },
     "data": {
         "data_path": null
