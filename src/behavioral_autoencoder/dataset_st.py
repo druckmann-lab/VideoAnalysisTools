@@ -216,8 +216,8 @@ class H5VideoDataset(Dataset):
                 indices = np.where(np.isin(h5_trial_ids, df['video_trial_id'].values))[0]
             else:
                 indices = np.arange(len(h5_trial_ids))
-            n_inds = np.minimum(len(indices), 5000)  # Limit to 5000 frames for efficiency
-            subsample_indices = np.linspace(0, len(indices)-1, num=n_inds, dtype=int)  # Sample every 10th frame for efficiency
+            n_inds = np.minimum(len(indices), 50000)  # Calc with 50k frames
+            subsample_indices = np.linspace(0, len(indices)-1, num=n_inds, dtype=int)
             mean_frame = np.mean(h5f['frames'][indices[subsample_indices]], axis=0)
         
         return torch.from_numpy(mean_frame).float() / 255.0
@@ -226,18 +226,131 @@ class H5VideoDataset(Dataset):
         return len(self.frame_indices)
 
     def __getitem__(self, idx):
-        # 1. LAZY LOADING for multiprocessing safety
-        #if self.h5_file is None:
-        #    self.h5_file = h5py.File(self.h5_path, 'r')
-        
-        # 2. Map dataset index to original H5 frame index
         h5_idx = self.frame_indices[idx]
-        
-        # 3. Read frame from disk
-        #frame = self.h5_file['frames'][h5_idx]
-        
-        # 4. Convert and normalize -> [0.0, 1.0]
-        # Make sure our bytes become float tensors
-        #frame_tensor = torch.from_numpy(frame).float() / 255.0
-        
         return self.frames[h5_idx].float() / 255.0 - self.mean_frame
+    
+    
+class H5VideoDatasetSequences(Dataset):
+    def __init__(self, h5_path, valid_trials_df, split='train', config=None):
+        """
+        Args:
+            h5_path (str): Path to the HDF5 file.
+            valid_trials_df (pd.DataFrame): DataFrame containing valid trials (with train_split, video_trial_id).
+            split (str): 'train', 'test', or 'all'.
+            config (dict): Configuration dictionary containing splitting parameters.
+        """
+        self.h5_path = h5_path
+        self.split = split
+        self.config = config or {}
+
+        print("Loading dataset into RAM...")
+        with h5py.File(self.h5_path, 'r') as f:
+            self.frames = torch.from_numpy(
+                f['frames'][:])   # shape: (N, H, W), lives in RAM
+            self.trial_ids_arr = f['trial_ids'][:]
+        print(f"Loaded {len(self.frames)} frames into RAM")
+        
+        # Extract valid video trial IDs
+        self.valid_trial_ids = valid_trials_df['video_trial_id'].dropna().unique()
+        
+        # Build mapping from dataset_idx -> global_h5_idx
+        self.sequences = self._build_sequences(valid_trials_df)
+
+        self.mean_frame = 0.
+        if self.config.get('subtract_mean_frame', False):
+            mean_frame_path = self.config.get('mean_frame_path')
+            if mean_frame_path and os.path.exists(mean_frame_path):
+                self.mean_frame = np.load(mean_frame_path)
+            else:
+                print("Warning: mean_frame_path not provided or file does not exist. Calculating it now...")
+                self.mean_frame = self._build_mean_frame(valid_trials_df)
+
+    def _build_sequences(self, df):
+        """
+        Constructs a list of actual HDF5 indices to sample from based on config.
+        """
+        # Open temporarily just to read the trial IDs
+        #with h5py.File(self.h5_path, 'r') as h5f:
+        #    h5_trial_ids = h5f['trial_ids'][:]
+        h5_trial_ids = self.trial_ids_arr
+
+        split_method = self.config.get('frame_selection_method', 'frame_subsample')
+        sequence_num_frames = self.config.get('sequence_num_frames', 1280)
+        
+        if split_method == 'frame_subsample':
+            nth_frame = self.config.get('train_nth_frame', 10)
+            
+            train_indices = []
+            test_indices = []
+            all_indices = []
+            
+            # Go trial-by-trial to subsample appropriately
+            for trial_id in self.valid_trial_ids:
+                trial_mask = (h5_trial_ids == trial_id)
+                trial_indices = np.where(trial_mask)[0]
+                
+                if len(trial_indices) == 0 or len(trial_indices) < sequence_num_frames:
+                    continue
+                    
+                # Train gets every nth frame within this trial
+                t_train = trial_indices[0:sequence_num_frames:nth_frame]
+                # Test is offset by half the nth_frame to get a different subset
+                t_test = trial_indices[nth_frame//2:(sequence_num_frames+nth_frame//2):nth_frame]
+                
+                train_indices.append(t_train)
+                test_indices.append(t_test)
+                all_indices.append(trial_indices)
+                
+            train_sequences = np.array(train_indices) if train_indices else np.array([])
+            test_sequences = np.array(test_indices) if test_indices else np.array([])
+            all_sequences = np.array(all_indices) if all_indices else np.array([])
+            
+            if self.split == 'train':
+                return train_sequences
+            elif self.split == 'test':
+                return test_sequences
+            else: # 'all'
+                return all_sequences
+                
+        elif split_method == 'trial_split':
+            # Subsample by entire trials
+            if self.split == 'train':
+                target_trials = df[df['train_split'] == 1]['video_trial_id'].values
+            elif self.split == 'test':
+                target_trials = df[df['train_split'] == 2]['video_trial_id'].values
+            else:
+                target_trials = df['video_trial_id'].values
+            sequences = []
+            for trial_id in np.where(np.isin(h5_trial_ids, target_trials))[0]:
+                trial_mask = (h5_trial_ids == trial_id)
+                trial_indices = np.where(trial_mask)[0]
+                if len(trial_indices) == 0 or len(trial_indices) < sequence_num_frames:
+                    continue
+                t_trial = trial_indices[0:sequence_num_frames:nth_frame]
+                sequences.append(t_trial)
+
+            return np.array(sequences)
+            
+        else:
+            raise ValueError(f"Unknown frame_selection_method: {split_method}")
+
+    def _build_mean_frame(self, df):
+        """Computes the mean frame across the entire dataset (or a subset) for normalization."""
+        with h5py.File(self.h5_path, 'r') as h5f:
+            h5_trial_ids = h5f['trial_ids'][:]
+            if df is not None:
+                indices = np.where(np.isin(h5_trial_ids, df['video_trial_id'].values))[0]
+            else:
+                indices = np.arange(len(h5_trial_ids))
+            n_inds = np.minimum(len(indices), 50000)  # Calc with 50k frames
+            subsample_indices = np.linspace(0, len(indices)-1, num=n_inds, dtype=int)
+            mean_frame = np.mean(h5f['frames'][indices[subsample_indices]], axis=0)
+        
+        return torch.from_numpy(mean_frame).float() / 255.0
+
+    def __len__(self):
+        return len(self.sequences)
+
+    def __getitem__(self, idx):
+        h5_inds = self.sequences[idx]
+        return self.frames[h5_inds].float() / 255.0 - self.mean_frame

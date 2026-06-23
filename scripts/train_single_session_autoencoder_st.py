@@ -4,6 +4,7 @@ import json
 import torch
 import argparse
 from torch.utils.data import DataLoader
+import datetime
 
 parent_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), '..'))
 print(f"Parent directory: {parent_dir}")
@@ -11,7 +12,7 @@ sys.path.append(parent_dir +'/src')
 
 from behavioral_autoencoder.dataset_st import SessionMetadataHandler
 from behavioral_autoencoder.trainer_st import VideoTrainer
-from behavioral_autoencoder.dataset_st import H5VideoDataset
+from behavioral_autoencoder.dataset_st import H5VideoDataset, H5VideoDatasetSequences
 from behavioral_autoencoder.models import AutoEncoder
 
 def update_dict(d, u):
@@ -65,9 +66,13 @@ if __name__ == "__main__":
 
     trial_split_df = metadata_handler.process_all()
 
-
-    train_dataset = H5VideoDataset(config['dataset']['dataset_path'], trial_split_df, split='train', config=config['dataset'])
-    val_dataset = H5VideoDataset(config['dataset']['dataset_path'], trial_split_df, split='test', config=config['dataset'])
+    dataset_type = config['dataset'].get('type', 'H5VideoDataset')
+    if dataset_type == 'H5VideoDataset':
+        train_dataset = H5VideoDataset(config['dataset']['dataset_path'], trial_split_df, split='train', config=config['dataset'])
+        val_dataset = H5VideoDataset(config['dataset']['dataset_path'], trial_split_df, split='test', config=config['dataset'])
+    elif dataset_type == 'H5VideoDatasetSequences':
+        train_dataset = H5VideoDatasetSequences(config['dataset']['dataset_path'], trial_split_df, split='train', config=config['dataset'])
+        val_dataset = H5VideoDatasetSequences(config['dataset']['dataset_path'], trial_split_df, split='test', config=config['dataset'])
 
     train_loader = DataLoader(train_dataset, 
                               batch_size=config['training']['batch_size'], 
@@ -87,15 +92,16 @@ if __name__ == "__main__":
     # Initialize Model and Run Trainer
     model = AutoEncoder(config['model'])
 
-    save_folder = config['training']['checkpoint_dir'] + f"{animal}_{session}/"
+    date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    save_folder = config['training']['checkpoint_dir'] + f"{animal}/{session}_{date_str}/"
     os.makedirs(save_folder, exist_ok=True)
     config['training']['checkpoint_dir'] = save_folder
+
+    # save the configs at the end of training
+    with open(save_folder + "config.json", "w") as f:
+        json.dump(config, f)
 
     trainer = VideoTrainer(model, config['training'])
 
     # Begin Training Execution Loop
     trainer.fit(train_loader, val_loader)
-
-    # save the configs at the end of training
-    with open(save_folder + "config.json", "w") as f:
-        json.dump(config, f)
