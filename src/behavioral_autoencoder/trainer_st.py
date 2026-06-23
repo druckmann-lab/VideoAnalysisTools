@@ -95,6 +95,11 @@ class VideoTrainer:
     def fit(self, train_loader, val_loader):
         best_val_loss = float('inf')
         epochs = self.config.get('epochs', 10)
+        train_losses = []
+        val_losses = []
+        val_recon_losses = []
+        val_latent_losses = []
+        lr_history = []
         
         for epoch in range(1, epochs + 1):
             train_loss = self.train_epoch(train_loader)
@@ -108,7 +113,13 @@ class VideoTrainer:
                     self.scheduler.step()
                     
             current_lr = self.optimizer.param_groups[0]['lr']
-            
+
+            train_losses.append(train_loss)
+            val_losses.append(val_loss)
+            val_recon_losses.append(val_recon_loss)
+            val_latent_losses.append(val_latent_loss)
+            lr_history.append(current_lr)
+
             # Handle Checkpointing
             if val_loss < best_val_loss and self.config.get('save_best_model', True):
                 best_val_loss = val_loss
@@ -121,7 +132,12 @@ class VideoTrainer:
                     'config': self.config,
                     'val_loss': val_loss,
                     'mean_frame_train': train_loader.dataset.mean_frame.cpu().numpy() if hasattr(train_loader.dataset, 'mean_frame') else None,
-                    'mean_frame_val': val_loader.dataset.mean_frame.cpu().numpy() if hasattr(val_loader.dataset, 'mean_frame') else None
+                    'mean_frame_val': val_loader.dataset.mean_frame.cpu().numpy() if hasattr(val_loader.dataset, 'mean_frame') else None,
+                    'train_losses': train_losses,
+                    'val_losses': val_losses,
+                    'val_recon_losses': val_recon_losses,
+                    'val_latent_losses': val_latent_losses,
+                    'lr_history': lr_history
                 }, checkpoint_path)
 
             if epoch % self.config.get('checkpoint_interval', 500) == (self.config.get('checkpoint_interval', 500) - 1):  # Save intermediate checkpoints every 500 epochs
@@ -134,5 +150,10 @@ class VideoTrainer:
                     'config': self.config,
                     'val_loss': val_loss,
                     'mean_frame_train': train_loader.dataset.mean_frame.cpu().numpy() if hasattr(train_loader.dataset, 'mean_frame') else None,
-                    'mean_frame_val': val_loader.dataset.mean_frame.cpu().numpy() if hasattr(val_loader.dataset, 'mean_frame') else None
+                    'mean_frame_val': val_loader.dataset.mean_frame.cpu().numpy() if hasattr(val_loader.dataset, 'mean_frame') else None,
+                    'train_losses': train_losses,
+                    'val_losses': val_losses,
+                    'val_recon_losses': val_recon_losses,
+                    'val_latent_losses': val_latent_losses,
+                    'lr_history': lr_history
                 }, checkpoint_path)
