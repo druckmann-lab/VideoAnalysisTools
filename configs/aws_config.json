@@ -1,7 +1,7 @@
 {
     "metadata_config": {
         "bpod_folder": "/home/ubuntu/VideoAnalysisTools/data/bpod_files/",
-        "h5_folder": "/home/ubuntu/VideoAnalysisTools/data/video_data/",
+        "h5_folder": "/opt/dlami/nvme/data/video_data/",
         "h5_filename": "kd115_twNew_20221206_115814_side_newcrop.h5"
     },
     "dataset": {
