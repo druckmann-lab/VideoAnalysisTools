@@ -33,7 +33,10 @@ class SessionMetadataHandler:
         
         # Store paths
         self.bpod_path = f"{self.config['bpod_folder']}{self.animal}/{self.session}.bpod.npy"
-        self.h5_path = f"{self.config['h5_folder']}{self.session}/{self.session}_side.h5"
+        if 'h5_filename' in self.config:
+            self.h5_path = f"{self.config['h5_folder']}{self.session}/{self.config['h5_filename']}"
+        else:
+            self.h5_path = f"{self.config['h5_folder']}{self.session}/{self.session}_side.h5"
 
     def load_files(self):
         """Loads bpod dataset lazily from disk."""

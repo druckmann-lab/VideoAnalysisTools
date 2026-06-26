@@ -1,7 +1,8 @@
 {
     "metadata_config": {
         "bpod_folder": "/home/ubuntu/VideoAnalysisTools/data/bpod_files/",
-        "h5_folder": "/home/ubuntu/VideoAnalysisTools/data/video_data/"
+        "h5_folder": "/home/ubuntu/VideoAnalysisTools/data/video_data/",
+        "h5_filename": "kd115_twNew_20221206_115814_side_newcrop.h5"
     },
     "dataset": {
         "frame_selection_method": "frame_subsample",
@@ -9,7 +10,7 @@
         "subtract_mean_frame": true,
         "mean_frame_path": null,
         "type": "H5VideoDatasetSequences",
-        "dataset_path": "/opt/dlami/nvme/data/video_data/kd115_twNew_20221206_115814/kd115_twNew_20221206_115814_side.h5"
+        "dataset_path": "/opt/dlami/nvme/data/video_data/kd115_twNew_20221206_115814/kd115_twNew_20221206_115814_side_newcrop.h5"
     },
     "data": {
         "data_path": null
