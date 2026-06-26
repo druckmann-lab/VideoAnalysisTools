@@ -93,9 +93,12 @@ if __name__ == "__main__":
     print(f"Loading checkpoint: {args.checkpoint}")
     checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=False)
 
-    #model_config = checkpoint['config']['model']
-    # temporary fix for loading the config
-    config = load_config(args.env)
+    if 'config' in checkpoint:
+        print("Found config in checkpoint.")
+        config = checkpoint['config']
+    else:
+        config = load_config(args.env)
+
     model_config = config['model']
 
     model = AutoEncoder(model_config)
