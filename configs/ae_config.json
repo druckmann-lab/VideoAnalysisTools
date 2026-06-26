@@ -33,10 +33,11 @@
     "data": {
         "image_height": 120,
         "image_width": 112,
-        "crop_top": 0,
-        "crop_bottom": 80,
-        "crop_left": 100,
-        "crop_right": 0
+        "crop_top": 25,
+        "crop_bottom": 90,
+        "crop_left": 240,
+        "crop_right": 0,
+        "data_path": "/home/kurgyis/Research/VideoAnalysisTools/data/kd115_twNew_20221206_115814/side/"
     },
     "model": {
         "num_blocks": 2,
