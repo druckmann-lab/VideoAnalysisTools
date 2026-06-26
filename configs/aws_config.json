@@ -6,10 +6,10 @@
     },
     "dataset": {
         "frame_selection_method": "frame_subsample",
-        "train_nth_frame": 5,
+        "train_nth_frame": 10,
         "subtract_mean_frame": true,
         "mean_frame_path": null,
-        "type": "H5VideoDatasetSequences",
+        "type": "H5VideoDataset",
         "dataset_path": "/opt/dlami/nvme/data/video_data/kd115_twNew_20221206_115814/kd115_twNew_20221206_115814_side_newcrop.h5"
     },
     "data": {
@@ -18,10 +18,10 @@
     "model": {
     },
     "training": {
-        "batch_size": 8,
+        "batch_size": 2048,
         "learning_rate": 1e-3,
         "latent_lambda": 1e-3,
-        "epochs": 2500,
+        "epochs": 10000,
         "lr_scheduler": "ReduceLROnPlateau",
         "checkpoint_dir": "/home/ubuntu/VideoAnalysisTools/data/checkpoints/",
         "checkpoint_interval": 100,
