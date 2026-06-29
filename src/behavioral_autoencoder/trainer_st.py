@@ -6,6 +6,7 @@ Trainer class for behavioral autoencoder training on Tim's Spatial Transcriptomi
 
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 import torch
 import torch.nn as nn
 import os
@@ -26,7 +27,9 @@ class VideoTrainer:
         
         # Modular Scheduler Setup
         if self.config.get('lr_scheduler') == 'ReduceLROnPlateau':
-            self.scheduler = ReduceLROnPlateau(self.optimizer, mode='min', patience=3, factor=0.5)
+            self.scheduler = ReduceLROnPlateau(self.optimizer, mode='min', patience=100, factor=0.5, min_lr = 1e-6, threshold = 1e-5)
+        elif self.config.get('lr_scheduler') == 'CosineAnnealingWarmRestarts':
+            self.scheduler = CosineAnnealingWarmRestarts(self.optimizer, T_0=500, T_mult=2, eta_min=1e-6)
         else:
             self.scheduler = None
             
@@ -109,6 +112,8 @@ class VideoTrainer:
             if self.scheduler is not None:
                 if isinstance(self.scheduler, ReduceLROnPlateau):
                     self.scheduler.step(val_loss)
+                elif isinstance(self.scheduler, CosineAnnealingWarmRestarts):
+                    self.scheduler.step(epoch)
                 else:
                     self.scheduler.step()
                     

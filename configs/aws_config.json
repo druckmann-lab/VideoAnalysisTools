@@ -24,7 +24,7 @@
         "epochs": 10000,
         "lr_scheduler": "ReduceLROnPlateau",
         "checkpoint_dir": "/home/ubuntu/VideoAnalysisTools/data/checkpoints/",
-        "checkpoint_interval": 100,
+        "checkpoint_interval": 200,
         "save_best_model": true
     }
 }
