@@ -22,7 +22,7 @@
         "learning_rate": 1e-3,
         "latent_lambda": 1e-3,
         "epochs": 10000,
-        "lr_scheduler": "ReduceLROnPlateau",
+        "lr_scheduler": "CosineAnnealingWarmRestarts",
         "checkpoint_dir": "/home/ubuntu/VideoAnalysisTools/data/checkpoints/",
         "checkpoint_interval": 200,
         "save_best_model": true
