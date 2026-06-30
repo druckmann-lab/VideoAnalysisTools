@@ -92,10 +92,12 @@ if __name__ == "__main__":
     # ── 1. Load checkpoint ───────────────────────────────────────────────────
     print(f"Loading checkpoint: {args.checkpoint}")
     checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=False)
+    potential_config_path = '/'.join(args.checkpoint.split('/')[:-1]) + '/config.json'
 
-    if 'config' in checkpoint:
+    if os.path.exists(potential_config_path):
         print("Found config in checkpoint.")
-        config = checkpoint['config']
+        with open(potential_config_path, 'r') as f:
+            config = json.load(f)
     else:
         config = load_config(args.env)
 
