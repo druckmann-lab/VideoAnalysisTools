@@ -12,18 +12,22 @@ import torch.nn as nn
 import os
 
 class VideoTrainer:
-    def __init__(self, model, config, device=None):
+    def __init__(self, model, config, device=None, loss_mask=None):
         self.model = model
         self.config = config
-        
+
         # Setup Compute Device
         self.device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model.to(self.device)
-        
+
         # Core Optimization Components
         self.optimizer = AdamW(self.model.parameters(), lr=self.config['learning_rate'])
         self.mse_criterion = nn.MSELoss()
         self.latent_lambda = self.config.get('latent_lambda', 0.0)
+
+        # Optional (H, W) mask excluding distractor regions (e.g. lickspout) from recon loss.
+        # Broadcasts against the (bs, seq, 1, H, W) frame tensors.
+        self.loss_mask = loss_mask.to(self.device) if loss_mask is not None else None
         
         # Modular Scheduler Setup
         if self.config.get('lr_scheduler') == 'ReduceLROnPlateau':
@@ -40,8 +44,16 @@ class VideoTrainer:
         Calculates the joint loss function: Total = MSE + lambda * L2_norm(z)
         """
         # Reconstruction loss
-        recon_loss = self.mse_criterion(x_recon, x)
-        
+        if self.loss_mask is not None:
+            sq_err = (x_recon - x) ** 2
+            # Normalize by the number of unmasked elements only, so the loss magnitude
+            # (and the recon/latent balance set by latent_lambda) stays comparable to
+            # the unmasked case.
+            n_valid = sq_err.numel() / self.loss_mask.numel() * self.loss_mask.sum()
+            recon_loss = (sq_err * self.loss_mask).sum() / n_valid
+        else:
+            recon_loss = self.mse_criterion(x_recon, x)
+
         # L2 Regularization on the latent space
         # z shape is (bs, seq_length, embed_size). Normalizing by element count.
         latent_loss = torch.mean(torch.sum(z ** 2, dim=-1))
@@ -138,6 +150,7 @@ class VideoTrainer:
                     'val_loss': val_loss,
                     'mean_frame_train': train_loader.dataset.mean_frame.cpu().numpy() if hasattr(train_loader.dataset, 'mean_frame') else None,
                     'mean_frame_val': val_loader.dataset.mean_frame.cpu().numpy() if hasattr(val_loader.dataset, 'mean_frame') else None,
+                    'loss_mask': self.loss_mask.cpu().numpy() if self.loss_mask is not None else None,
                     'train_losses': train_losses,
                     'val_losses': val_losses,
                     'val_recon_losses': val_recon_losses,
@@ -156,6 +169,7 @@ class VideoTrainer:
                     'val_loss': val_loss,
                     'mean_frame_train': train_loader.dataset.mean_frame.cpu().numpy() if hasattr(train_loader.dataset, 'mean_frame') else None,
                     'mean_frame_val': val_loader.dataset.mean_frame.cpu().numpy() if hasattr(val_loader.dataset, 'mean_frame') else None,
+                    'loss_mask': self.loss_mask.cpu().numpy() if self.loss_mask is not None else None,
                     'train_losses': train_losses,
                     'val_losses': val_losses,
                     'val_recon_losses': val_recon_losses,

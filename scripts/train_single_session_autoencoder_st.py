@@ -12,7 +12,7 @@ sys.path.append(parent_dir +'/src')
 
 from behavioral_autoencoder.dataset_st import SessionMetadataHandler
 from behavioral_autoencoder.trainer_st import VideoTrainer
-from behavioral_autoencoder.dataset_st import H5VideoDataset, H5VideoDatasetSequences
+from behavioral_autoencoder.dataset_st import H5VideoDataset, H5VideoDatasetSequences, build_loss_mask
 from behavioral_autoencoder.models import AutoEncoder
 
 def update_dict(d, u):
@@ -101,7 +101,13 @@ if __name__ == "__main__":
     with open(save_folder + "config.json", "w") as f:
         json.dump(config, f)
 
-    trainer = VideoTrainer(model, config['training'])
+    # Optionally exclude hand-picked distractor regions (e.g. lickspout) from the recon loss
+    loss_mask = build_loss_mask(
+        train_dataset.frames.shape[1:],
+        config['dataset'].get('loss_mask_exclude_regions')
+    )
+
+    trainer = VideoTrainer(model, config['training'], loss_mask=loss_mask)
 
     # Begin Training Execution Loop
     trainer.fit(train_loader, val_loader)

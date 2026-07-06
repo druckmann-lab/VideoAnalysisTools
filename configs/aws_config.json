@@ -10,7 +10,10 @@
         "subtract_mean_frame": true,
         "mean_frame_path": null,
         "type": "H5VideoDataset",
-        "dataset_path": "/opt/dlami/nvme/data/video_data/kd115_twNew_20221206_115814/kd115_twNew_20221206_115814_side_newcrop.h5"
+        "dataset_path": "/opt/dlami/nvme/data/video_data/kd115_twNew_20221206_115814/kd115_twNew_20221206_115814_side_newcrop.h5",
+        "loss_mask_exclude_regions": [
+            {"top": 72, "bottom": 65, "left": 80, "right": 113}
+        ]
     },
     "data": {
         "data_path": null

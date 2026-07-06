@@ -14,6 +14,31 @@ import h5py
 from sklearn.model_selection import train_test_split
 
 
+def build_loss_mask(shape, exclude_regions=None):
+    """
+    Builds a (H, W) float mask of ones with zeros inside hand-picked rectangles.
+
+    Used to exclude session-specific distractor regions (e.g. a lickspout) from the
+    reconstruction loss so the encoder isn't pressured to spend latent capacity on them.
+
+    Args:
+        shape (tuple): (H, W) of the frames as loaded from the h5 file (post-crop space).
+        exclude_regions (list[dict], optional): each dict has 'top', 'bottom', 'left', 'right'
+            pixel bounds (top/left inclusive, bottom/right exclusive) of a region to exclude.
+
+    Returns:
+        torch.FloatTensor of shape (H, W), or None if no regions are given.
+    """
+    if not exclude_regions:
+        return None
+
+    mask = np.ones(shape, dtype=np.float32)
+    for region in exclude_regions:
+        mask[region['top']:region['bottom'], region['left']:region['right']] = 0.0
+
+    return torch.from_numpy(mask)
+
+
 class SessionMetadataHandler:
     def __init__(self, config, mode='local', animal=None, session=None):
         """
