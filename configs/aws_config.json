@@ -24,10 +24,10 @@
         "batch_size": 2048,
         "learning_rate": 1e-3,
         "latent_lambda": 1e-3,
-        "epochs": 5000,
+        "epochs": 6000,
         "lr_scheduler": "CosineAnnealingWarmRestarts",
         "checkpoint_dir": "/home/ubuntu/VideoAnalysisTools/data/checkpoints/",
-        "checkpoint_interval": 200,
+        "checkpoint_interval": 100,
         "save_best_model": true
     }
 }
