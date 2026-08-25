@@ -26,6 +26,15 @@ Usage examples:
         --h5-filename session.h5 \
         --save-path /path/to/output/ \
         --overwrite
+
+    # Use a per-session crop config (e.g. from configs/crop_configs/) to
+    # overwrite config['data'], with any explicit --crop-* flags still
+    # taking precedence over the session config:
+    python preprocess_single_session_videos_to_h5.py \
+        --config ../configs/ae_config.json \
+        --session-config ../configs/crop_configs/kd115_twNew_20221206_115814.json \
+        --h5-filename session.h5 \
+        --save-path /path/to/output/
 """
 
 import argparse
@@ -63,6 +72,15 @@ def parse_args():
         type=str,
         required=True,
         help="Path to the JSON config file (e.g. configs/ae_config.json).",
+    )
+    parser.add_argument(
+        "--session-config",
+        type=str,
+        default=None,
+        help="Optional path to a per-session JSON config (e.g. from "
+        "configs/crop_configs/) whose keys overwrite config['data']. "
+        "Explicit --image-height/--crop-*/--data-path flags still take "
+        "precedence over this file.",
     )
     parser.add_argument(
         "--h5-filename",
@@ -119,6 +137,19 @@ def main():
 
     with open(config_path, "r") as f:
         config = json.load(f)
+
+    # ---- Apply per-session config overrides to config['data'] -------------
+    # Overwrites config['data'] wholesale with the session config's keys;
+    # any key not present in the session config keeps its original value.
+    if args.session_config is not None:
+        session_config_path = os.path.abspath(args.session_config)
+        if not os.path.isfile(session_config_path):
+            sys.exit(f"Error: session config file not found: {session_config_path}")
+
+        with open(session_config_path, "r") as f:
+            session_config = json.load(f)
+
+        config["data"].update(session_config)
 
     # ---- Apply CLI overrides to config['data'] -----------------------------
     # Only overwrite keys that the user explicitly provided.
