@@ -1,0 +1,8 @@
+{
+  "image_height": 120,
+  "image_width": 112,
+  "crop_top": 25,
+  "crop_bottom": 75,
+  "crop_left": 240,
+  "crop_right": 0
+}
