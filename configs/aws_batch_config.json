@@ -1,0 +1,30 @@
+{
+    "metadata_config": {
+        "bpod_folder": "/opt/dlami/nvme/",
+        "h5_folder": "/opt/dlami/nvme/"
+    },
+    "dataset": {
+        "frame_selection_method": "frame_subsample",
+        "train_nth_frame": 10,
+        "subtract_mean_frame": true,
+        "mean_frame_path": null,
+        "type": "H5VideoDataset",
+        "dataset_path": "/opt/dlami/nvme/kd115_twNew_20221206_115814_side_newcrop.h5",
+        "loss_mask_exclude_regions": null
+    },
+    "data": {
+        "data_path": null
+    },
+    "model": {
+    },
+    "training": {
+        "batch_size": 2048,
+        "learning_rate": 1e-3,
+        "latent_lambda": 1e-3,
+        "epochs": 6000,
+        "lr_scheduler": "CosineAnnealingWarmRestarts",
+        "checkpoint_dir": "/opt/dlami/nvme/checkpoints/",
+        "checkpoint_interval": 100,
+        "save_best_model": true
+    }
+}

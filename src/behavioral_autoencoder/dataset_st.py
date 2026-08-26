@@ -57,8 +57,13 @@ class SessionMetadataHandler:
         self.video_train_test_split_df = None
         
         # Store paths
-        self.bpod_path = f"{self.config['bpod_folder']}{self.animal}/{self.session}.bpod.npy"
-        if 'h5_filename' in self.config:
+        if 'bpod_path' in self.config:
+            self.bpod_path = self.config['bpod_path']
+        else:
+            self.bpod_path = f"{self.config['bpod_folder']}{self.animal}/{self.session}.bpod.npy"
+        if 'h5_path' in self.config:
+            self.h5_path = self.config['h5_path']
+        elif 'h5_filename' in self.config:
             self.h5_path = f"{self.config['h5_folder']}{self.session}/{self.config['h5_filename']}"
         else:
             self.h5_path = f"{self.config['h5_folder']}{self.session}/{self.session}_side.h5"
