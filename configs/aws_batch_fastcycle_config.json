@@ -1,0 +1,7 @@
+{
+    "_comment": "Arm B of the scheduler A/B. Identical to aws_batch except T_mult, so the first 500 epochs are bit-identical to arm A and any divergence is attributable purely to restart cadence. T_mult=1 gives 15 fixed 500-epoch cycles; 7500 is a cycle boundary either way, so both arms end fully annealed at eta_min. NOTE: T_0=250 with T_mult=2 would NOT work here -- its boundaries are 250/750/1750/3750/7750 and 7500 would stop mid-cycle.",
+    "extends": "aws_batch",
+    "training": {
+        "T_mult": 1
+    }
+}

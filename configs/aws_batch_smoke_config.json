@@ -1,0 +1,8 @@
+{
+    "_comment": "Gate 2: a ~200-epoch run of the real sweep config, to confirm the epoch time, memory footprint and loss trajectory before committing 20 sessions to an 11h run. Everything matches aws_batch except the run length and a checkpoint interval short enough to exercise the periodic save path.",
+    "extends": "aws_batch",
+    "training": {
+        "epochs": 200,
+        "checkpoint_interval": 50
+    }
+}

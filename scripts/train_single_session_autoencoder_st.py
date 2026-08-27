@@ -25,19 +25,50 @@ def update_dict(d, u):
             d[k] = v
     return d
 
+def strip_private(d):
+    """
+    Drops "_"-prefixed keys recursively.
+
+    JSON has no comments, so env configs carry "_comment" instead; without this
+    they would survive the merge into the config.json saved beside every
+    checkpoint.
+    """
+    return {k: (strip_private(v) if isinstance(v, dict) else v)
+            for k, v in d.items() if not k.startswith('_')}
+
+
 def load_config(env_name):
-    """Loads base config and overwrites with environment specifics."""
+    """
+    Loads base config and overwrites with environment specifics.
+
+    An env config may carry "extends": "<other_env>" to inherit from another env
+    config before its own keys are applied. This exists so a variant -- e.g. one
+    arm of a scheduler A/B -- can be a two-line delta rather than a full copy of
+    its parent. Duplicated config files drift, and a drifted arm silently
+    invalidates the comparison it was built for.
+    """
     with open(f'{parent_dir}/configs/ae_config.json', 'r') as f:
         config = json.load(f)
-        
-    env_path = f'{parent_dir}/configs/{env_name}_config.json'
-    if os.path.exists(env_path):
+
+    chain, name, seen = [], env_name, set()
+    while name:
+        env_path = f'{parent_dir}/configs/{name}_config.json'
+        if not os.path.exists(env_path):
+            print(f"Warning: Environment config {env_path} not found.")
+            break
+        if name in seen:
+            raise ValueError(f"circular 'extends' in config chain at {name!r}")
+        seen.add(name)
         with open(env_path, 'r') as f:
             env_config = json.load(f)
+        # popped so it does not survive into the saved config.json
+        name = env_config.pop('extends', None)
+        chain.append(strip_private(env_config))
+
+    # Parents first, so a child's keys win over the ones it inherits.
+    for env_config in reversed(chain):
         config = update_dict(config, env_config)
-    else:
-        print(f"Warning: Environment config {env_path} not found.")
-        
+
     return config
 
 if __name__ == "__main__":

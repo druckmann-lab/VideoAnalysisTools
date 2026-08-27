@@ -61,7 +61,8 @@
         "embed_size": 16,
         "use_batch_norm_linear": false,
         "image_height": 120,
-        "image_width": 112
+        "image_width": 112,
+        "channels_last": false
     },
     "training": {
         "batch_size": 32,
@@ -69,7 +70,12 @@
         "latent_lambda": 1e-3,
         "epochs": 50,
         "lr_scheduler": "ReduceLROnPlateau",
+        "T_0": 500,
+        "T_mult": 2,
+        "eta_min": 1e-6,
         "checkpoint_interval": 500,
-        "save_best_model": true
+        "save_best_model": true,
+        "amp_dtype": null,
+        "random_seed": 0
     }
 }
