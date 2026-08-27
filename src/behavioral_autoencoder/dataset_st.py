@@ -176,7 +176,8 @@ class H5VideoDataset(Dataset):
         if self.config.get('subtract_mean_frame', False):
             mean_frame_path = self.config.get('mean_frame_path')
             if mean_frame_path and os.path.exists(mean_frame_path):
-                self.mean_frame = np.load(mean_frame_path)
+                mean_frame_np = np.load(mean_frame_path)
+                self.mean_frame = torch.from_numpy(mean_frame_np)
             else:
                 print("Warning: mean_frame_path not provided or file does not exist. Calculating it now...")
                 self.mean_frame = self._build_mean_frame(valid_trials_df)
