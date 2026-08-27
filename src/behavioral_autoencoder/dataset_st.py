@@ -143,6 +143,68 @@ class SessionMetadataHandler:
         return self.get_video_split_df()
 
 
+class GpuTensorLoader:
+    """
+    Iterates one split that lives entirely on the GPU as uint8.
+
+    Drop-in replacement for torch.utils.data.DataLoader over an H5VideoDataset.
+    Measured on an A10G (bench-20260827-134351): 9.04s -> 8.05s per epoch, 1.12x.
+
+    That 1.12x understates it, because this is what makes the precision work pay.
+    The DataLoader tops out near 9,300 frames/s, while bf16 + channels_last needs
+    ~16,200 frames/s to stay fed at 5.1 s/epoch -- so on the DataLoader path most
+    of the 1.74x would be spent waiting for batches instead of training.
+
+    Two side effects that matter as much as the speed:
+      - No worker processes. The DataLoader pair ran 16 (8 per split), which is
+        2x oversubscribed on an 8-vCPU g5.2xlarge.
+      - Only the split's own frames are needed, so the caller can release the
+        full ~15 GB host frame tensor afterwards.
+
+    Exposes .dataset so VideoTrainer needs no changes: it uses
+    len(dataloader.dataset) to normalise the epoch loss and .mean_frame when
+    writing checkpoints. The trainer's batch.to(device) is a free no-op for
+    tensors that are already resident.
+
+    Shuffling uses the global torch RNG, so seed with torch.manual_seed() (which
+    seeds CUDA too) for a reproducible epoch order.
+    """
+
+    def __init__(self, dataset, batch_size, shuffle, device=None):
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.device = device or torch.device(
+            'cuda' if torch.cuda.is_available() else 'cpu')
+
+        idx = torch.from_numpy(np.asarray(dataset.frame_indices, dtype=np.int64))
+        # uint8 on the GPU: ~1.03 GB for an 82.8k-frame split at 1x120x112.
+        self.frames = dataset.frames[idx].to(self.device)
+
+        mean_frame = dataset.mean_frame
+        self.mean_frame = (mean_frame.to(self.device).float()
+                           if torch.is_tensor(mean_frame) else float(mean_frame))
+
+    def __len__(self):
+        n = self.frames.shape[0]
+        # ceil, not floor: the trailing partial batch is kept. Dropping it would
+        # leave train_epoch summing over fewer samples than len(self.dataset),
+        # under-reporting the loss by ~1% and breaking comparability with
+        # earlier DataLoader runs.
+        return (n + self.batch_size - 1) // self.batch_size
+
+    def __iter__(self):
+        n = self.frames.shape[0]
+        if self.shuffle:
+            order = torch.randperm(n, device=self.device)
+        else:
+            order = torch.arange(n, device=self.device)
+        for i in range(0, n, self.batch_size):
+            batch = self.frames[order[i:i + self.batch_size]]
+            # Mirrors H5VideoDataset.__getitem__ exactly.
+            yield batch.float().div_(255.0).sub_(self.mean_frame)
+
+
 class H5VideoDataset(Dataset):
     @staticmethod
     def load_frames_to_ram(h5_path):

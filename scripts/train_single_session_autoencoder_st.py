@@ -1,5 +1,6 @@
 import os
 import sys
+import gc
 import json
 import torch
 import argparse
@@ -12,7 +13,7 @@ sys.path.append(parent_dir +'/src')
 
 from behavioral_autoencoder.dataset_st import SessionMetadataHandler
 from behavioral_autoencoder.trainer_st import VideoTrainer
-from behavioral_autoencoder.dataset_st import H5VideoDataset, H5VideoDatasetSequences, build_loss_mask
+from behavioral_autoencoder.dataset_st import H5VideoDataset, H5VideoDatasetSequences, build_loss_mask, GpuTensorLoader
 from behavioral_autoencoder.models import AutoEncoder
 
 def update_dict(d, u):
@@ -68,6 +69,14 @@ if __name__ == "__main__":
         
     print(config)
 
+    # Seed before anything that draws: model init and the shuffled epoch order.
+    # torch.manual_seed also seeds CUDA, which is what GpuTensorLoader's randperm
+    # uses. Without this the two scheduler arms of an A/B would differ by
+    # initialisation as well as by schedule.
+    seed = config['training'].get('random_seed', 0)
+    torch.manual_seed(seed)
+    print(f"torch.manual_seed({seed})")
+
     # Initialize Dataset and Loaders
 
     metadata_handler = SessionMetadataHandler(
@@ -97,20 +106,47 @@ if __name__ == "__main__":
         train_dataset = H5VideoDatasetSequences(config['dataset']['dataset_path'], trial_split_df, split='train', config=config['dataset'])
         val_dataset = H5VideoDatasetSequences(config['dataset']['dataset_path'], trial_split_df, split='test', config=config['dataset'])
 
-    train_loader = DataLoader(train_dataset, 
-                              batch_size=config['training']['batch_size'], 
-                              shuffle=True, 
-                              num_workers=8, 
-                              pin_memory=True,
-                              prefetch_factor=2,
-                              persistent_workers=True)
-    val_loader = DataLoader(val_dataset, 
-                            batch_size=config['training']['batch_size'], 
-                            shuffle=False, 
-                            num_workers=8, 
-                            pin_memory=True,
-                            prefetch_factor=2,
-                            persistent_workers=True)
+    # Captured before the host frame tensor is released below.
+    frame_shape = train_dataset.frames.shape[1:]
+
+    if dataset_type == 'H5VideoDataset':
+        # Both splits move to the GPU as uint8 and are indexed there. See
+        # GpuTensorLoader for why this matters more than its 1.12x suggests.
+        train_loader = GpuTensorLoader(train_dataset,
+                                       batch_size=config['training']['batch_size'],
+                                       shuffle=True)
+        val_loader = GpuTensorLoader(val_dataset,
+                                     batch_size=config['training']['batch_size'],
+                                     shuffle=False)
+
+        # The full host tensor holds all ~1.19M frames, but the two splits select
+        # only ~166k of them and now have their own GPU copies. Releasing it takes
+        # peak RSS from ~19.6 GB to well under 10, which is what lets the run fit
+        # a g5.2xlarge. Both datasets alias the same tensor, so both refs must go.
+        train_dataset.frames = None
+        val_dataset.frames = None
+        del frames
+        gc.collect()
+        print(f"Released host frame tensor; "
+              f"{len(train_loader.dataset)} train / {len(val_loader.dataset)} val "
+              f"frames resident on GPU")
+    else:
+        # H5VideoDatasetSequences yields sequences via .sequences, not
+        # .frame_indices, so GpuTensorLoader does not apply to it.
+        train_loader = DataLoader(train_dataset,
+                                  batch_size=config['training']['batch_size'],
+                                  shuffle=True,
+                                  num_workers=8,
+                                  pin_memory=True,
+                                  prefetch_factor=2,
+                                  persistent_workers=True)
+        val_loader = DataLoader(val_dataset,
+                                batch_size=config['training']['batch_size'],
+                                shuffle=False,
+                                num_workers=8,
+                                pin_memory=True,
+                                prefetch_factor=2,
+                                persistent_workers=True)
 
     # Initialize Model and Run Trainer
     model = AutoEncoder(config['model'])
@@ -126,7 +162,7 @@ if __name__ == "__main__":
 
     # Optionally exclude hand-picked distractor regions (e.g. lickspout) from the recon loss
     loss_mask = build_loss_mask(
-        train_dataset.frames.shape[1:],
+        frame_shape,
         config['dataset'].get('loss_mask_exclude_regions')
     )
 
