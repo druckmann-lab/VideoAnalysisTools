@@ -26,6 +26,22 @@ class VideoTrainer:
         self.device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model.to(self.device)
 
+        # cuDNN algorithm selection. Config-driven because the value of these
+        # flags turns out to depend on precision in a non-obvious way: measured
+        # at only 1.04x in fp32, they were left off -- and the 200-epoch smoke run
+        # at bf16+channels_last WITHOUT them came in at 8.44 s/epoch against the
+        # 5.12 s measured WITH them. Without autotuning, cuDNN appears not to
+        # select NHWC bf16 kernels for these 16/32-channel convs at all, so
+        # channels_last just adds layout conversions for no gain.
+        # Cost: benchmark mode autotunes using large workspaces (peaks near
+        # 17 GB observed, vs ~9 GB steady without). Fine for one session on a
+        # 23 GB A10G; it would constrain running two sessions per GPU.
+        if self.device.type == 'cuda':
+            tf32 = self.config.get('tf32', False)
+            torch.backends.cuda.matmul.allow_tf32 = tf32
+            torch.backends.cudnn.allow_tf32 = tf32
+            torch.backends.cudnn.benchmark = self.config.get('cudnn_benchmark', False)
+
         # Core Optimization Components
         self.optimizer = AdamW(self.model.parameters(), lr=self.config['learning_rate'])
         self.mse_criterion = nn.MSELoss()

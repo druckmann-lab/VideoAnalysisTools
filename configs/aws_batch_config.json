@@ -32,6 +32,8 @@
         "val_interval": 10,
         "save_best_model": true,
         "amp_dtype": "bf16",
+        "tf32": true,
+        "cudnn_benchmark": true,
         "random_seed": 0
     }
 }

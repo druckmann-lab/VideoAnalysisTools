@@ -76,6 +76,8 @@
         "checkpoint_interval": 500,
         "save_best_model": true,
         "amp_dtype": null,
+        "tf32": false,
+        "cudnn_benchmark": false,
         "random_seed": 0
     }
 }
