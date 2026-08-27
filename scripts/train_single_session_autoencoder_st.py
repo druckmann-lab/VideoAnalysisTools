@@ -81,8 +81,18 @@ if __name__ == "__main__":
 
     dataset_type = config['dataset'].get('type', 'H5VideoDataset')
     if dataset_type == 'H5VideoDataset':
-        train_dataset = H5VideoDataset(config['dataset']['dataset_path'], trial_split_df, split='train', config=config['dataset'])
-        val_dataset = H5VideoDataset(config['dataset']['dataset_path'], trial_split_df, split='test', config=config['dataset'])
+        #train_dataset = H5VideoDataset(config['dataset']['dataset_path'], trial_split_df, split='train', config=config['dataset'])
+        #val_dataset = H5VideoDataset(config['dataset']['dataset_path'], trial_split_df, split='test', config=config['dataset'])
+        # Read the frames ONCE and share them between the two splits.
+        frames, trial_ids_arr = H5VideoDataset.load_frames_to_ram(
+            config['dataset']['dataset_path'])
+        train_dataset = H5VideoDataset(
+            config['dataset']['dataset_path'], trial_split_df, split='train',
+            config=config['dataset'], frames=frames, trial_ids_arr=trial_ids_arr)
+        val_dataset = H5VideoDataset(
+            config['dataset']['dataset_path'], trial_split_df, split='test',
+            config=config['dataset'], frames=frames, trial_ids_arr=trial_ids_arr)
+
     elif dataset_type == 'H5VideoDatasetSequences':
         train_dataset = H5VideoDatasetSequences(config['dataset']['dataset_path'], trial_split_df, split='train', config=config['dataset'])
         val_dataset = H5VideoDatasetSequences(config['dataset']['dataset_path'], trial_split_df, split='test', config=config['dataset'])

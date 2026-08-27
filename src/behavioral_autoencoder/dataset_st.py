@@ -144,25 +144,61 @@ class SessionMetadataHandler:
 
 
 class H5VideoDataset(Dataset):
-    def __init__(self, h5_path, valid_trials_df, split='train', config=None):
+    @staticmethod
+    def load_frames_to_ram(h5_path):
+        """
+        Reads frames + trial_ids once so several splits can share one copy.
+
+        The goal is to share tensor across train and validation datasets
+        to avoid loading 10+ GB of video data into RAM multiple times.
+        """
+        print("Loading dataset into RAM...")
+        with h5py.File(h5_path, 'r') as f:
+            frames = torch.from_numpy(f['frames'][:]) #shape: (N, H, W)
+            trial_ids_arr = f['trial_ids'][:]
+        print(f"Loaded {len(frames)} frames into RAM")
+        return frames, trial_ids_arr
+
+    def __init__(self, h5_path, valid_trials_df, split='train', config=None,
+                 frames=None, trial_ids_arr=None):
         """
         Args:
             h5_path (str): Path to the HDF5 file.
             valid_trials_df (pd.DataFrame): DataFrame containing valid trials (with train_split, video_trial_id).
             split (str): 'train', 'test', or 'all'.
             config (dict): Configuration dictionary containing splitting parameters.
+            frames (torch.Tensor, optional): pre-loaded frame tensor from
+                load_frames_to_ram(), to be shared across splits. If given,
+                trial_ids_arr must be given too.
+            trial_ids_arr (np.ndarray, optional): matching trial ids.
+
         """
         self.h5_path = h5_path
         self.split = split
         self.config = config or {}
 
-        print("Loading dataset into RAM...")
-        with h5py.File(self.h5_path, 'r') as f:
-            self.frames = torch.from_numpy(
-                f['frames'][:])   # shape: (N, H, W), lives in RAM
-            self.trial_ids_arr = f['trial_ids'][:]
-        print(f"Loaded {len(self.frames)} frames into RAM")
-        
+        #print("Loading dataset into RAM...")
+        #with h5py.File(self.h5_path, 'r') as f:
+        #    self.frames = torch.from_numpy(
+        #        f['frames'][:])   # shape: (N, H, W), lives in RAM
+        #    self.trial_ids_arr = f['trial_ids'][:]
+        #print(f"Loaded {len(self.frames)} frames into RAM")
+        if (frames is None) != (trial_ids_arr is None):
+            raise ValueError(
+                "pass both frames and trial_ids_arr, or neither -- "
+                "trial_ids_arr is required because _build_frame_indices reads "
+                "self.trial_ids_arr rather than reopening the h5")
+
+        if frames is None:
+            frames, trial_ids_arr = self.load_frames_to_ram(self.h5_path)
+        else:
+            print(f"Reusing {len(frames)} frames already in RAM (shared)")
+
+        # Safe to alias: __getitem__ only reads self.frames and returns a new
+        # tensor (.float() allocates), so no split can mutate another's data.
+        self.frames = frames
+        self.trial_ids_arr = trial_ids_arr
+
         # Extract valid video trial IDs
         self.valid_trial_ids = valid_trials_df['video_trial_id'].dropna().unique()
         
