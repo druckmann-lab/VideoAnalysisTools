@@ -47,6 +47,7 @@ if __name__ == "__main__":
     parser.add_argument('--session', type=str, default='kd115_twNew_20221206_115814', help="Session identifier (e.g., kd115_twNew_20221206_115814)")
     parser.add_argument('--bpod_path', type=str, default=None, help="Optional path to the Bpod file (overrides config)")
     parser.add_argument('--h5_path', type=str, default=None, help="Optional path to the H5 file (overrides config)")
+    parser.add_argument('--mean_frame_path', type=str, default=None, help="Optional path to the mean frame file (overrides config)")
 
     args = parser.parse_args()
 
@@ -62,6 +63,8 @@ if __name__ == "__main__":
     if args.h5_path:
         config['metadata_config']['h5_path'] = args.h5_path
         config['dataset']['dataset_path'] = args.h5_path
+    if args.mean_frame_path:
+        config['dataset']['mean_frame_path'] = args.mean_frame_path
         
     print(config)
 
