@@ -54,8 +54,16 @@ def load_config(env_name):
     while name:
         env_path = f'{parent_dir}/configs/{name}_config.json'
         if not os.path.exists(env_path):
-            print(f"Warning: Environment config {env_path} not found.")
-            break
+            # Raise, do not warn. Falling back to ae_config.json silently gives
+            # batch 32, 50 epochs and no checkpoint_dir -- a wrong experiment
+            # that looks like a real one until it crashes hours later.
+            available = sorted(
+                f[:-len('_config.json')]
+                for f in os.listdir(f'{parent_dir}/configs')
+                if f.endswith('_config.json') and f != 'ae_config.json')
+            raise FileNotFoundError(
+                f"env config not found: {env_path}\n"
+                f"available envs: {', '.join(available)}")
         if name in seen:
             raise ValueError(f"circular 'extends' in config chain at {name!r}")
         seen.add(name)
@@ -73,8 +81,12 @@ def load_config(env_name):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train Autoencoder")
-    parser.add_argument('--env', type=str, default='local', choices=['local', 'aws','aws_batch'],
-                        help="Environment to run in (determines paths and compute specs)")
+    # Deliberately not a `choices` list: env names are open-ended (variants like
+    # aws_batch_fastcycle are just another configs/<env>_config.json), and a
+    # stale choices list would reject a valid config with argparse exit 2 --
+    # after the instance has already staged 14 GB. load_config validates instead.
+    parser.add_argument('--env', type=str, default='local',
+                        help="Environment to run in: configs/<env>_config.json")
     parser.add_argument('--animal', type=str, default='kd115', help="Animal identifier (e.g., kd115)")
     parser.add_argument('--session', type=str, default='kd115_twNew_20221206_115814', help="Session identifier (e.g., kd115_twNew_20221206_115814)")
     parser.add_argument('--bpod_path', type=str, default=None, help="Optional path to the Bpod file (overrides config)")
