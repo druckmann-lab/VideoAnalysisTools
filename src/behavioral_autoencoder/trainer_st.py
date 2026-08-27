@@ -118,12 +118,25 @@ class VideoTrainer:
         
         for epoch in range(1, epochs + 1):
             train_loss = self.train_epoch(train_loader)
-            val_loss, val_recon_loss, val_latent_loss = self.evaluate(val_loader)
+
+            ckpt_interval = self.config.get('checkpoint_interval', 500)
+            is_ckpt_epoch = epoch % ckpt_interval == (ckpt_interval - 1)
+
+            do_val = (epoch % self.config.get('val_interval', 1) == 0
+                      or epoch == 1 or epoch == epochs or is_ckpt_epoch)
+
+            if do_val:
+                val_loss, val_recon_loss, val_latent_loss = self.evaluate(val_loader)
+            else:
+                val_loss = val_recon_loss = val_latent_loss = float('nan')
+
+            #val_loss, val_recon_loss, val_latent_loss = self.evaluate(val_loader)
             
             # Adjust learning rate based on performance
             if self.scheduler is not None:
                 if isinstance(self.scheduler, ReduceLROnPlateau):
-                    self.scheduler.step(val_loss)
+                    if do_val:
+                        self.scheduler.step(val_loss)
                 elif isinstance(self.scheduler, CosineAnnealingWarmRestarts):
                     self.scheduler.step(epoch)
                 else:
@@ -158,7 +171,7 @@ class VideoTrainer:
                     'lr_history': lr_history
                 }, checkpoint_path)
 
-            if epoch % self.config.get('checkpoint_interval', 500) == (self.config.get('checkpoint_interval', 500) - 1):  # Save intermediate checkpoints every 500 epochs
+            if is_ckpt_epoch:
                 print(f"Epoch {epoch:02d}/{epochs:02d} | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f} | Val Recon Loss: {val_recon_loss:.6f} | Val Latent Loss: {val_latent_loss:.6f} | LR: {current_lr:.6e}")
                 checkpoint_path = os.path.join(self.config['checkpoint_dir'], f'checkpoint_epoch_{epoch}.pt')
                 torch.save({

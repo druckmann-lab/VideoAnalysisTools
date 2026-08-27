@@ -25,6 +25,7 @@
         "lr_scheduler": "CosineAnnealingWarmRestarts",
         "checkpoint_dir": "/opt/dlami/nvme/checkpoints/",
         "checkpoint_interval": 100,
+        "val_interval": 10,
         "save_best_model": true
     }
 }
