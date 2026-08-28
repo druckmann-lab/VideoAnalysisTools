@@ -31,36 +31,10 @@ sys.path.append(parent_dir + '/src')
 
 from behavioral_autoencoder.dataset_st import SessionMetadataHandler, H5VideoDataset
 from behavioral_autoencoder.models import AutoEncoder
-
-
-# ─────────────────────────────────────────────
-# Config helpers (mirrors train_st.py)
-# ─────────────────────────────────────────────
-
-def update_dict(d, u):
-    """Recursively updates a nested dictionary."""
-    for k, v in u.items():
-        if isinstance(v, dict):
-            d[k] = update_dict(d.get(k, {}), v)
-        else:
-            d[k] = v
-    return d
-
-
-def load_config(env_name):
-    """Loads base config and overwrites with environment specifics."""
-    with open(f'{parent_dir}/configs/ae_config.json', 'r') as f:
-        config = json.load(f)
-
-    env_path = f'{parent_dir}/configs/{env_name}_config.json'
-    if os.path.exists(env_path):
-        with open(env_path, 'r') as f:
-            env_config = json.load(f)
-        config = update_dict(config, env_config)
-    else:
-        print(f"Warning: Environment config {env_path} not found, using base config only.")
-
-    return config
+# The shared definition, so inference resolves a checkpoint's env exactly as
+# training did. This script used to carry its own copy, which predated the
+# "extends" mechanism and silently resolved a variant env to base defaults.
+from behavioral_autoencoder.config import load_config
 
 
 # ─────────────────────────────────────────────
@@ -71,14 +45,21 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run autoencoder inference on all frames")
     parser.add_argument('--checkpoint', type=str, required=True,
                         help="Path to the trained model checkpoint (.pt file)")
-    parser.add_argument('--env', type=str, default='aws', choices=['local', 'aws'],
-                        help="Environment config to load (determines paths)")
+    # Not a `choices` list: env names are open-ended (aws_batch, and variants
+    # like aws_batch_fastcycle, are just another configs/<env>_config.json).
+    # load_config validates and lists what is available.
+    parser.add_argument('--env', type=str, default='aws',
+                        help="Environment config to load: configs/<env>_config.json")
     parser.add_argument('--animal', type=str, required=True,
                         help="Animal identifier (e.g., kd115)")
     parser.add_argument('--session', type=str, required=True,
                         help="Session identifier (e.g., kd115_twNew_20221206_115814)")
     parser.add_argument('--output_dir', type=str, required=True,
                         help="Folder to save output H5 files")
+    parser.add_argument('--bpod_path', type=str, default=None,
+                        help="Optional path to the Bpod file (overrides config)")
+    parser.add_argument('--h5_path', type=str, default=None,
+                        help="Optional path to the H5 file (overrides config)")
     parser.add_argument('--batch_size', type=int, default=2048,
                         help="Inference batch size (can be larger than training)")
     parser.add_argument('--save_recons', action='store_true', default=True,
@@ -100,6 +81,14 @@ if __name__ == "__main__":
             config = json.load(f)
     else:
         config = load_config(args.env)
+
+    # A checkpoint trained on EC2 carries that instance's /opt/dlami/nvme paths,
+    # so redirect them when running the same checkpoint anywhere else.
+    if args.bpod_path:
+        config['metadata_config']['bpod_path'] = args.bpod_path
+    if args.h5_path:
+        config['metadata_config']['h5_path'] = args.h5_path
+        config['dataset']['dataset_path'] = args.h5_path
 
     model_config = config['model']
 

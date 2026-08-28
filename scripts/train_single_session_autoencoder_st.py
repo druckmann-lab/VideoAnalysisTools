@@ -15,69 +15,9 @@ from behavioral_autoencoder.dataset_st import SessionMetadataHandler
 from behavioral_autoencoder.trainer_st import VideoTrainer
 from behavioral_autoencoder.dataset_st import H5VideoDataset, H5VideoDatasetSequences, build_loss_mask, GpuTensorLoader
 from behavioral_autoencoder.models import AutoEncoder
-
-def update_dict(d, u):
-    """Recursively updates a nested dictionary."""
-    for k, v in u.items():
-        if isinstance(v, dict):
-            d[k] = update_dict(d.get(k, {}), v)
-        else:
-            d[k] = v
-    return d
-
-def strip_private(d):
-    """
-    Drops "_"-prefixed keys recursively.
-
-    JSON has no comments, so env configs carry "_comment" instead; without this
-    they would survive the merge into the config.json saved beside every
-    checkpoint.
-    """
-    return {k: (strip_private(v) if isinstance(v, dict) else v)
-            for k, v in d.items() if not k.startswith('_')}
-
-
-def load_config(env_name):
-    """
-    Loads base config and overwrites with environment specifics.
-
-    An env config may carry "extends": "<other_env>" to inherit from another env
-    config before its own keys are applied. This exists so a variant -- e.g. one
-    arm of a scheduler A/B -- can be a two-line delta rather than a full copy of
-    its parent. Duplicated config files drift, and a drifted arm silently
-    invalidates the comparison it was built for.
-    """
-    with open(f'{parent_dir}/configs/ae_config.json', 'r') as f:
-        config = json.load(f)
-
-    chain, name, seen = [], env_name, set()
-    while name:
-        env_path = f'{parent_dir}/configs/{name}_config.json'
-        if not os.path.exists(env_path):
-            # Raise, do not warn. Falling back to ae_config.json silently gives
-            # batch 32, 50 epochs and no checkpoint_dir -- a wrong experiment
-            # that looks like a real one until it crashes hours later.
-            available = sorted(
-                f[:-len('_config.json')]
-                for f in os.listdir(f'{parent_dir}/configs')
-                if f.endswith('_config.json') and f != 'ae_config.json')
-            raise FileNotFoundError(
-                f"env config not found: {env_path}\n"
-                f"available envs: {', '.join(available)}")
-        if name in seen:
-            raise ValueError(f"circular 'extends' in config chain at {name!r}")
-        seen.add(name)
-        with open(env_path, 'r') as f:
-            env_config = json.load(f)
-        # popped so it does not survive into the saved config.json
-        name = env_config.pop('extends', None)
-        chain.append(strip_private(env_config))
-
-    # Parents first, so a child's keys win over the ones it inherits.
-    for env_config in reversed(chain):
-        config = update_dict(config, env_config)
-
-    return config
+# One definition, shared with single_session_inference.py and the benchmark:
+# training and inference must resolve a checkpoint's env identically.
+from behavioral_autoencoder.config import load_config, update_dict, strip_private
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train Autoencoder")

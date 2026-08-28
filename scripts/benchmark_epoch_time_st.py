@@ -54,9 +54,9 @@ from behavioral_autoencoder.dataset_st import H5VideoDataset, SessionMetadataHan
 from behavioral_autoencoder.models import AutoEncoder, Encoder
 from behavioral_autoencoder.trainer_st import VideoTrainer
 
-# Import rather than re-implement: a benchmark that merges configs differently
-# from the training script is measuring a model you are not going to train.
-from train_single_session_autoencoder_st import load_config
+# The shared definition: a benchmark that merges configs differently from the
+# training script is measuring a model you are not going to train.
+from behavioral_autoencoder.config import load_config
 
 
 # --------------------------------------------------------------------------
