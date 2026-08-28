@@ -62,8 +62,10 @@ if __name__ == "__main__":
                         help="Optional path to the H5 file (overrides config)")
     parser.add_argument('--batch_size', type=int, default=2048,
                         help="Inference batch size (can be larger than training)")
-    parser.add_argument('--save_recons', action='store_true', default=True,
-                        help="Also save reconstructed frames (disable to save disk space)")
+    parser.add_argument('--save_recons', action=argparse.BooleanOptionalAction,
+                        default=False,
+                        help="Also save reconstructed frames (uint8). Costs ~11 GB "
+                             "RAM for a full session; latents-only by default.")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -146,6 +148,8 @@ if __name__ == "__main__":
     # We don't know the latent shape until the first batch, so collect into lists first.
     all_latents = []
     all_recons  = []   # only populated if save_recons=True
+    print(f"save_recons={args.save_recons}"
+          + ("" if args.save_recons else "  (latents only; pass --save_recons to include frames)"))
 
     print("Running inference...")
     with torch.no_grad():
