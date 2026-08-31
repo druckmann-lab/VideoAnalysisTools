@@ -6,11 +6,10 @@ refactor. This launcher has extra machinery of its own worth pinning -- it
 resolves checkpoints out of S3, and it groups jobs by SESSION rather than by run
 so that both arms of an A/B stage the 13.9 GB h5 once instead of twice.
 
-One test here is xfail(strict=True): this launcher does NOT yet have the
-per-session failure handling that launch_training.py got, which is the very gap
-that prompted these tests. Once the refactor gives it that handling, the xfail
-turns into an unexpected pass and pytest reports a failure -- which is the signal
-to delete the marker.
+test_capacity_failure_does_not_abort_the_remaining_sessions was xfail(strict=True)
+until the shared-plumbing refactor: this launcher had no per-session handling,
+which is the gap that prompted these tests. The refactor made it xpass, pytest
+reported that as a failure, and the marker came off.
 """
 
 import json
@@ -182,11 +181,23 @@ class TestWritePrefixGuard:
         with pytest.raises(SystemExit, match="cannot PutObject under 'benchmarks/'"):
             LI.check_s3_write_prefix("benchmarks/")
 
-    def test_warns_rather_than_crashes_when_the_policy_file_is_absent(
-            self, monkeypatch, capsys):
-        monkeypatch.setattr(LI, "POLICY_FILE", "/nonexistent/policy.json")
-        LI.check_s3_write_prefix("anything/")
+    def test_warns_rather_than_crashes_when_the_policy_file_is_absent(self, capsys):
+        # preflight passes the launcher's POLICY_FILE explicitly, so the test
+        # exercises the same call shape rather than patching a module global.
+        LI.check_s3_write_prefix("anything/", "/nonexistent/policy.json")
         assert "WARN" in capsys.readouterr().out
+
+    def test_preflight_checks_the_prefix_with_the_launchers_policy_file(
+            self, monkeypatch):
+        """Pins the wiring: preflight must pass POLICY_FILE, not rely on a default."""
+        seen = {}
+        monkeypatch.setattr(LI, "check_s3_write_prefix",
+                            lambda prefix, pf=None: seen.update(prefix=prefix, pf=pf))
+        monkeypatch.setattr(LI, "fetch_at_sha", lambda sha, p: TestPreflight.GOOD_SCRIPT)
+        monkeypatch.setattr(LI, "missing_session_inputs", lambda s, **k: [])
+        LI.preflight({SESSION: []}, SHA)
+        assert seen["prefix"] == LI.RUNS_PREFIX
+        assert seen["pf"] == LI.POLICY_FILE
 
 
 class TestUserData:
@@ -307,12 +318,9 @@ class TestBillingSafety:
         assert tags["Kind"] == "inference"
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "launch_inference.launch() has no per-session try/except yet -- a capacity "
-    "failure aborts the remaining sessions. The shared-plumbing refactor should "
-    "fix this; when it does, this xpasses and pytest flags it so the marker can "
-    "be removed."))
-def test_capacity_failure_should_not_abort_the_remaining_sessions(aws, monkeypatch):
+def test_capacity_failure_does_not_abort_the_remaining_sessions(aws, monkeypatch):
+    """Was xfail until the shared-plumbing refactor gave this launcher the same
+    per-session handling launch_training already had."""
     sessions = {"sess_a": TestUserData.JOBS, "sess_b": TestUserData.JOBS,
                 "sess_c": TestUserData.JOBS}
     aws.install(monkeypatch, LI)
@@ -329,6 +337,10 @@ def test_capacity_failure_should_not_abort_the_remaining_sessions(aws, monkeypat
         return run_instances_response("i-0000000000000000a")
 
     with mock.patch.object(aws.ec2, "run_instances", side_effect=maybe_fail):
-        LI.launch(sessions, SHA, INFER_ID, "g5.2xlarge", "2h", False, dry_run=False)
+        launched, failed = LI.launch(sessions, SHA, INFER_ID, "g5.2xlarge", "2h",
+                                     False, dry_run=False)
 
     assert attempted == list(sessions), "every session must be attempted"
+    assert [n for _, n in launched] == ["sess_b", "sess_c"]
+    assert [n for n, _, _ in failed] == ["sess_a"]
+    assert failed[0][1] == "InsufficientInstanceCapacity"

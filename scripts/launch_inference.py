@@ -35,36 +35,21 @@ byte/pixel, so a full session adds ~11 GB on top of the ~15 GB h5 -- 26 GB of a
 
 import argparse
 import datetime
-import fnmatch
-import json
-import os
-import subprocess
 import sys
-import urllib.request
 
-import boto3
+# Shared AWS plumbing; imported by name so tests can patch e.g.
+# launch_inference.fetch_at_sha and have preflight resolve the patched one.
+import boto3  # noqa: F401  (tests patch launch_inference.boto3.client)
+from aws_launch_common import (BPOD_PREFIX, BRANCH, BUCKET, GH_REPO,
+                               H5_PREFIX, H5_SUFFIX, MEAN_PREFIX, POLICY_FILE,
+                               PYTHON, REGION, REPO_URL, RUNS_PREFIX,
+                               check_s3_write_prefix, fetch_at_sha,
+                               launch_instances, missing_session_inputs,
+                               print_failure_summary, resolve_sha,
+                               validate_user_data)
 
-REGION = "us-west-2"
-BUCKET = "balint-video-autoencoder-data-233060639700-us-west-2-an"
-AMI_ID = "ami-0bcccc2c1e9b9f874"
 INSTANCE_TYPE = "g5.2xlarge"
-PYTHON = "/home/ubuntu/ml_env/bin/python"
-PROFILE = "VideoAutoencoderTrainingRole"
-
-GH_OWNER = "druckmann-lab"
-GH_REPO = "VideoAnalysisTools"
-REPO_URL = f"https://github.com/{GH_OWNER}/{GH_REPO}.git"
-BRANCH = "balint-dev"
 INFER_SCRIPT = "scripts/single_session_inference.py"
-
-H5_PREFIX = "preprocessed_videos/"
-H5_SUFFIX = "_side_crop.h5"
-BPOD_PREFIX = "bpod_files/"
-MEAN_PREFIX = "mean_frames/"
-RUNS_PREFIX = "runs/"
-
-POLICY_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                           "instance_role_policy.json")
 
 # Runaway guard, not a schedule. Expect ~5 min setup + ~2.5 min per checkpoint.
 TIMEOUT = "2h"
@@ -273,47 +258,10 @@ exit $FAILED
 '''
 
 
-def resolve_sha(ref: str) -> str:
-    out = subprocess.run(["git", "ls-remote", REPO_URL, ref],
-                         capture_output=True, text=True, timeout=60)
-    if out.returncode != 0 or not out.stdout.strip():
-        sys.exit(f"could not resolve '{ref}' on {REPO_URL}\n{out.stderr}")
-    return out.stdout.split()[0]
 
 
-def fetch_at_sha(sha: str, path: str) -> str:
-    url = f"https://raw.githubusercontent.com/{GH_OWNER}/{GH_REPO}/{sha}/{path}"
-    return urllib.request.urlopen(url, timeout=30).read().decode()
 
 
-def check_s3_write_prefix(prefix: str) -> None:
-    """
-    The instance role scopes PutObject to specific prefixes, and every sync in
-    the wrapper past the initial probe ends in `|| true`. Catch a bad prefix here
-    rather than paying for compute whose output cannot be saved.
-    """
-    if not os.path.exists(POLICY_FILE):
-        print(f"  WARN {os.path.basename(POLICY_FILE)} not found; relying on the "
-              f"instance probe")
-        return
-    with open(POLICY_FILE) as f:
-        policy = json.load(f)
-    arn_root = f"arn:aws:s3:::{BUCKET}/"
-    allowed = []
-    for st in policy.get("Statement", []):
-        if st.get("Effect") != "Allow":
-            continue
-        actions = st.get("Action", [])
-        actions = [actions] if isinstance(actions, str) else actions
-        if not any(a in ("s3:PutObject", "s3:*", "*") for a in actions):
-            continue
-        res = st.get("Resource", [])
-        res = [res] if isinstance(res, str) else res
-        allowed += [r[len(arn_root):] for r in res if r.startswith(arn_root)]
-    if not any(fnmatch.fnmatch(prefix + "probe/probe.txt", p) for p in allowed):
-        sys.exit(f"  FAIL instance role cannot PutObject under '{prefix}'\n"
-                 f"       writable prefixes: {sorted(allowed)}")
-    print(f"  OK   instance role can write under '{prefix}'")
 
 
 def s3c():
@@ -407,7 +355,7 @@ def build_jobs(runs: list, sessions_filter: list, labels: list) -> dict:
 
 def preflight(jobs: dict, sha: str) -> None:
     print(f"pre-flight against sha {sha[:7]}")
-    check_s3_write_prefix(RUNS_PREFIX)
+    check_s3_write_prefix(RUNS_PREFIX, POLICY_FILE)
 
     try:
         src = fetch_at_sha(sha, INFER_SCRIPT)
@@ -423,16 +371,7 @@ def preflight(jobs: dict, sha: str) -> None:
                  f"--save_recons flag; commit and push {BRANCH}")
     print("  OK   pushed inference script accepts all required flags")
 
-    s3 = s3c()
-    missing = []
-    for session in jobs:
-        animal = session.split("_")[0]
-        for key in (H5_PREFIX + session + H5_SUFFIX,
-                    BPOD_PREFIX + animal + "/" + session + ".bpod.npy"):
-            try:
-                s3.head_object(Bucket=BUCKET, Key=key)
-            except Exception:
-                missing.append(key)
+    missing = missing_session_inputs(jobs, need_mean_frame=False)
     if missing:
         print("  FAIL missing session inputs:")
         for k in missing:
@@ -471,45 +410,21 @@ def build_user_data(session: str, joblist: list, sha: str, infer_id: str,
         ("@@SAVE_RECONS_FLAG@@", "--save_recons" if save_recons else "--no-save_recons"),
     ]:
         ud = ud.replace(tok, val)
-    assert ud.startswith("#!/bin/bash\n"), "shebang must be at byte 0"
-    assert "@@" not in ud, "unsubstituted placeholder"
-    assert ">(" not in ud, "no process substitution"
-    assert len(ud) < 16384, f"user-data too large: {len(ud)}"
-    return ud
+    return validate_user_data(ud)
 
 
 def launch(jobs: dict, sha: str, infer_id: str, itype: str, timeout: str,
-           save_recons: bool, dry_run: bool) -> None:
-    ec2 = boto3.client("ec2", region_name=REGION)
-    for session, joblist in jobs.items():
-        ud = build_user_data(session, joblist, sha, infer_id, itype, timeout,
-                             save_recons)
-        if dry_run:
-            print(ud)
-            print(f"\n# {len(ud)} bytes for {session}, {len(joblist)} job(s)",
-                  file=sys.stderr)
-            return
-        r = ec2.run_instances(
-            ImageId=AMI_ID, InstanceType=itype, MinCount=1, MaxCount=1,
-            IamInstanceProfile={"Name": PROFILE},
-            UserData=ud,
-            InstanceInitiatedShutdownBehavior="terminate",
-            MetadataOptions={"HttpTokens": "optional"},
-            TagSpecifications=[{
-                "ResourceType": "instance",
-                "Tags": [
-                    {"Key": "Name", "Value": "infer-" + session},
-                    # The IAM policy only allows terminating instances with this
-                    # tag -- omitting it means you cannot stop the run.
-                    {"Key": "Project", "Value": "video-autoencoder"},
-                    {"Key": "RunId", "Value": infer_id},
-                    {"Key": "Session", "Value": session},
-                    {"Key": "Kind", "Value": "inference"},
-                ],
-            }],
-        )
-        print(f"  {r['Instances'][0]['InstanceId']}  {session}  "
-              f"{len(joblist)} job(s)  {itype}")
+           save_recons: bool, dry_run: bool) -> tuple:
+    """One instance per session, each running all of that session's jobs."""
+    specs = ((session,
+              build_user_data(session, joblist, sha, infer_id, itype, timeout,
+                              save_recons),
+              [{"Key": "Name", "Value": "infer-" + session},
+               {"Key": "RunId", "Value": infer_id},
+               {"Key": "Session", "Value": session},
+               {"Key": "Kind", "Value": "inference"}])
+             for session, joblist in jobs.items())
+    return launch_instances(specs, itype, dry_run)
 
 
 def status(infer_id: str) -> None:
@@ -581,9 +496,12 @@ def main() -> None:
     print(f"\ninference_id={infer_id}  {len(jobs)} instance(s) on {a.instance_type}")
     for session, joblist in jobs.items():
         print(f"  {session}: " + ", ".join(f"{r}/{l}" for r, l, _, _ in joblist))
-    launch(jobs, sha, infer_id, a.instance_type, a.timeout, a.save_recons, a.dry_run)
+    launched, failed = launch(jobs, sha, infer_id, a.instance_type, a.timeout,
+                              a.save_recons, a.dry_run)
     if a.dry_run:
         return
+
+    print(f"\n{len(launched)}/{len(jobs)} instance(s) launched")
 
     print(f"\nwatch:   python {sys.argv[0]} --status {infer_id}")
     print(f"outputs: s3://{BUCKET}/{RUNS_PREFIX}<run_id>/<session>/inference/{infer_id}/<label>/")
@@ -592,6 +510,14 @@ def main() -> None:
           f"--filters Name=tag:RunId,Values={infer_id} "
           f"Name=instance-state-name,Values=running,pending "
           f"--query 'Reservations[].Instances[].InstanceId' --output text)")
+
+    if failed:
+        retry = (f"  python {sys.argv[0]} --runs {' '.join(a.runs)} \\\n"
+                 f"      --sha {sha} --checkpoints {' '.join(a.checkpoints)} "
+                 f"--instance-type {a.instance_type} \\\n"
+                 f"      --sessions " + " ".join(s for s, _, _ in failed))
+        print_failure_summary(failed, retry, noun="session")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

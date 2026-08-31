@@ -305,3 +305,35 @@ class TestResolveSha:
                                                       stderr=""))
         with pytest.raises(SystemExit):
             LT.resolve_sha("no-such-branch")
+
+
+class TestSharedValidation:
+    """
+    validate_user_data lives in aws_launch_common and guards every launcher.
+
+    These exercise the guard itself rather than a real user-data string: the
+    generated ones are legitimately small, so weakening the size assertion would
+    otherwise go unnoticed until a template grew past 16 KB in production.
+    """
+
+    def test_rejects_user_data_over_the_ec2_cap(self):
+        import aws_launch_common as C
+        oversized = "#!/bin/bash\n" + "x" * C.MAX_USER_DATA
+        with pytest.raises(AssertionError, match="user-data too large"):
+            C.validate_user_data(oversized)
+
+    def test_accepts_user_data_just_under_the_cap(self):
+        import aws_launch_common as C
+        head = "#!/bin/bash\n"
+        ok = head + "x" * (C.MAX_USER_DATA - len(head) - 1)
+        assert C.validate_user_data(ok) is ok
+
+    @pytest.mark.parametrize("bad,match", [
+        ("# comment\n#!/bin/bash\n", "shebang must be at byte 0"),
+        ("#!/bin/bash\n@@UNSET@@\n", "unsubstituted placeholder"),
+        ("#!/bin/bash\ncat >(tee x)\n", "no process substitution"),
+    ])
+    def test_rejects_each_way_of_bricking_an_instance(self, bad, match):
+        import aws_launch_common as C
+        with pytest.raises(AssertionError, match=match):
+            C.validate_user_data(bad)

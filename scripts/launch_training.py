@@ -48,42 +48,29 @@ Known gaps, deliberately not handled:
 """
 
 import argparse
-import base64
 import datetime
-import json
-import subprocess
 import sys
-import urllib.request
 
-import boto3
-from botocore.exceptions import BotoCoreError, ClientError
+# Shared AWS plumbing. Imported by name (not `common.x`) so the names stay
+# module-globals here -- tests monkeypatch e.g. launch_training.fetch_at_sha,
+# and preflight must resolve the patched one.
+import boto3  # noqa: F401  (tests patch launch_training.boto3.client)
+from aws_launch_common import (BPOD_PREFIX, BRANCH, BUCKET, GH_REPO, H5_PREFIX,
+                               H5_SUFFIX, MEAN_PREFIX, PYTHON, REGION, REPO_URL,
+                               RUNS_PREFIX, fetch_at_sha, launch_instances,
+                               missing_session_inputs, print_failure_summary,
+                               resolve_config_chain, resolve_sha,
+                               validate_user_data)
 
-REGION = "us-west-2"
-BUCKET = "balint-video-autoencoder-data-233060639700-us-west-2-an"
-AMI_ID = "ami-0bcccc2c1e9b9f874"
 INSTANCE_TYPE = "g5.2xlarge"
-PYTHON = "/home/ubuntu/ml_env/bin/python"
-PROFILE = "VideoAutoencoderTrainingRole"
-
-GH_OWNER = "druckmann-lab"
-GH_REPO = "VideoAnalysisTools"
-REPO_URL = f"https://github.com/{GH_OWNER}/{GH_REPO}.git"
-BRANCH = "balint-dev"
 TRAIN_SCRIPT = "scripts/train_single_session_autoencoder_st.py"
-
 ENV_NAME = "aws_batch"          # checkpoint_dir=/opt/dlami/nvme/checkpoints/
-H5_PREFIX = "preprocessed_videos/"
-H5_SUFFIX = "_side_crop.h5"
-BPOD_PREFIX = "bpod_files/"
-MEAN_PREFIX = "mean_frames/"
-RUNS_PREFIX = "runs/"
 
 # epochs=1500 at 5.43 s/epoch is ~2.3h expected. This is a runaway guard, not a
 # schedule -- do not set it near the expected runtime or a slow-but-healthy run
-# gets killed. Trimmed it slightly given the new expectation: if bf16 or
-# cudnn.benchmark ever regress to the old 9.28 s/epoch, a guard set close to 2.3h
-# would silently truncate every run in the sweep while still looking successful.
-# Nothing is billed for headroom that is never used.
+# gets killed. If bf16 or cudnn.benchmark ever regress to the old 9.28 s/epoch, a
+# guard set close to 2.3h would silently truncate every run in the sweep while
+# still looking successful. Nothing is billed for headroom that is never used.
 TIMEOUT = "12h"
 
 
@@ -259,19 +246,6 @@ exit $TRAIN_RC
 '''
 
 
-def resolve_sha(ref: str) -> str:
-    out = subprocess.run(["git", "ls-remote", REPO_URL, ref],
-                         capture_output=True, text=True, timeout=60)
-    if out.returncode != 0 or not out.stdout.strip():
-        sys.exit(f"could not resolve '{ref}' on {REPO_URL}\n{out.stderr}")
-    return out.stdout.split()[0]
-
-
-def fetch_at_sha(sha: str, path: str):
-    url = f"https://raw.githubusercontent.com/{GH_OWNER}/{GH_REPO}/{sha}/{path}"
-    return urllib.request.urlopen(url, timeout=30).read().decode()
-
-
 def preflight(sessions: list, sha: str, env_name: str) -> None:
     """Fail locally and for free rather than on twenty instances."""
     print(f"pre-flight against sha {sha[:7]}")
@@ -291,33 +265,13 @@ def preflight(sessions: list, sha: str, env_name: str) -> None:
     print(f"  OK   pushed training script accepts all required flags")
 
     # 2. The env config must exist at this sha, including anything it extends.
-    #    load_config only WARNS on a missing env config and then falls back to
-    #    ae_config.json -- batch 32, 50 epochs, no checkpoint_dir. That is a
-    #    silent wrong-experiment, so resolve the whole chain here instead.
-    name, chain = env_name, []
-    while name and len(chain) < 6:
-        cfg_path = f"configs/{name}_config.json"
-        try:
-            cfg = json.loads(fetch_at_sha(sha, cfg_path))
-        except Exception as e:
-            sys.exit(f"  FAIL could not fetch {cfg_path} at {sha[:7]}: {e}\n"
-                     f"       commit and push {BRANCH}, then rerun")
-        chain.append(name)
-        name = cfg.get("extends")
+    #    load_config only raises at runtime, by which point the instance has
+    #    already staged 14 GB.
+    chain = resolve_config_chain(sha, env_name, fetch=fetch_at_sha)
     print(f"  OK   env config chain present: {' -> '.join(chain)}")
 
     # 3. Every input object must exist before anything launches.
-    s3 = boto3.client("s3", region_name=REGION)
-    missing = []
-    for sess in sessions:
-        animal = sess.split("_")[0]
-        for key in (H5_PREFIX + sess + H5_SUFFIX,
-                    BPOD_PREFIX + animal + "/" + sess + ".bpod.npy",
-                    MEAN_PREFIX + sess + "_mean_frame.npy"):
-            try:
-                s3.head_object(Bucket=BUCKET, Key=key)
-            except Exception:
-                missing.append(key)
+    missing = missing_session_inputs(sessions, need_mean_frame=True)
     if missing:
         print("  FAIL missing S3 objects:")
         for k in missing:
@@ -367,69 +321,21 @@ def build_user_data(session: str, sha: str, run_id: str, timeout: str,
         ("@@TIMEOUT@@", timeout),
     ]:
         ud = ud.replace(tok, val)
-    assert ud.startswith("#!/bin/bash\n"), "shebang must be at byte 0"
-    assert "@@" not in ud, "unsubstituted placeholder"
-    assert ">(" not in ud, "no process substitution"
-    assert len(ud) < 16384, f"user-data too large: {len(ud)}"
-    return ud
+    return validate_user_data(ud)
 
 
 def launch(sessions: list, run_id: str, sha: str, itype: str,
            timeout: str, env_name: str, dry_run: bool) -> tuple:
-    """
-    One run_instances call per session; returns (launched, failed).
-
-    Each call is MinCount=MaxCount=1, so a capacity shortfall affects one session
-    rather than the whole request -- but an uncaught error would still abandon
-    every session after it, leaving a half-launched sweep and no summary. So each
-    is caught and recorded, and main() prints a retry command for the failures.
-    """
-    ec2 = boto3.client("ec2", region_name=REGION)
-    launched, failed = [], []
-    for sess in sessions:
-        ud = build_user_data(sess, sha, run_id, timeout, env_name)
-        if dry_run:
-            print(ud)
-            print(f"\n# {len(ud)} bytes for {sess}", file=sys.stderr)
-            return [], []
-        try:
-            r = ec2.run_instances(
-                ImageId=AMI_ID,
-                InstanceType=itype,
-                MinCount=1, MaxCount=1,
-                IamInstanceProfile={"Name": PROFILE},
-                UserData=ud,
-                InstanceInitiatedShutdownBehavior="terminate",
-                MetadataOptions={"HttpTokens": "optional"},
-                TagSpecifications=[{
-                    "ResourceType": "instance",
-                    "Tags": [
-                        {"Key": "Name", "Value": "train-" + sess},
-                        # The IAM policy only allows terminating instances with
-                        # this tag -- omitting it means you cannot stop the run.
-                        {"Key": "Project", "Value": "video-autoencoder"},
-                        {"Key": "RunId", "Value": run_id},
-                        {"Key": "Session", "Value": sess},
-                        # So an A/B's two arms are distinguishable in console.
-                        {"Key": "Env", "Value": env_name},
-                    ],
-                }],
-            )
-        except ClientError as e:
-            code = e.response.get("Error", {}).get("Code", "ClientError")
-            msg = e.response.get("Error", {}).get("Message", str(e))
-            print(f"  {'FAILED':19s}  {sess}  {code}")
-            failed.append((sess, code, msg))
-            continue
-        except BotoCoreError as e:
-            # Connection/endpoint problems, not an AWS-side rejection.
-            print(f"  {'FAILED':19s}  {sess}  {type(e).__name__}")
-            failed.append((sess, type(e).__name__, str(e)))
-            continue
-        iid = r["Instances"][0]["InstanceId"]
-        print(f"  {iid}  {sess}")
-        launched.append((iid, sess))
-    return launched, failed
+    """One instance per session; returns (launched, failed)."""
+    specs = ((sess,
+              build_user_data(sess, sha, run_id, timeout, env_name),
+              [{"Key": "Name", "Value": "train-" + sess},
+               {"Key": "RunId", "Value": run_id},
+               {"Key": "Session", "Value": sess},
+               # So an A/B's two arms are distinguishable in the console.
+               {"Key": "Env", "Value": env_name}])
+             for sess in sessions)
+    return launch_instances(specs, itype, dry_run)
 
 
 def status(run_id: str) -> None:
@@ -506,20 +412,11 @@ def main() -> None:
           f"--query 'Reservations[].Instances[].InstanceId' --output text)")
 
     if failed:
-        # The launched instances are already training and will self-terminate;
-        # only the missing sessions need relaunching.
-        print(f"\n{'=' * 72}")
-        print(f"{len(failed)} session(s) did NOT launch:")
-        for sess, code, msg in failed:
-            print(f"  {sess:36s} {code}")
-            print(f"      {msg[:110]}")
-        print("\nRetry just those. --sha and --run-id are pinned so the retried")
-        print("sessions run identical code and land under the same S3 prefix:\n")
-        print(f"  python {sys.argv[0]} --sha {sha} --run-id {run_id} \\\n"
-              f"      --env {a.env} --instance-type {a.instance_type} "
-              f"--timeout {a.timeout} \\\n"
-              f"      --sessions " + " ".join(sess for sess, _, _ in failed))
-        print(f"{'=' * 72}")
+        retry = (f"  python {sys.argv[0]} --sha {sha} --run-id {run_id} \\\n"
+                 f"      --env {a.env} --instance-type {a.instance_type} "
+                 f"--timeout {a.timeout} \\\n"
+                 f"      --sessions " + " ".join(s for s, _, _ in failed))
+        print_failure_summary(failed, retry, noun="session")
         sys.exit(1)
 
 
