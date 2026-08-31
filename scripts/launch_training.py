@@ -3,10 +3,15 @@
 Launch per-session autoencoder training on disposable EC2 instances.
 
 Built for one session now; the same code runs the full sweep by passing more
-sessions and a concurrency cap. Nothing about it is single-session specific.
+sessions. Nothing about it is single-session specific. There is no concurrency
+cap -- every session gets its own instance immediately, which is fine because
+they are independent and 20 x g5.2xlarge is 160 of the 768 vCPU G-instance
+quota. A session whose instance cannot be launched is reported at the end with
+a retry command rather than aborting the rest.
 
   python launch_training.py --sessions kd104_twNew_20221124_104921
-  python launch_training.py --all --max-concurrent 20
+  python launch_training.py --all          # --max-concurrent is NOT IMPLEMENTED:
+                                          # every session launches at once
   python launch_training.py --status <run_id>
 
   # scheduler A/B: two arms differing only in training.T_mult
@@ -51,6 +56,7 @@ import sys
 import urllib.request
 
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 
 REGION = "us-west-2"
 BUCKET = "balint-video-autoencoder-data-233060639700-us-west-2-an"
@@ -72,11 +78,12 @@ BPOD_PREFIX = "bpod_files/"
 MEAN_PREFIX = "mean_frames/"
 RUNS_PREFIX = "runs/"
 
-# epochs=7500 at 5.31 s/epoch is ~11.1h expected. This is a runaway guard, not a
+# epochs=1500 at 5.43 s/epoch is ~2.3h expected. This is a runaway guard, not a
 # schedule -- do not set it near the expected runtime or a slow-but-healthy run
-# gets killed. 24h specifically because if bf16 ever regresses to the old
-# 9.28 s/epoch, 7500 epochs takes 19.3h and a 16h guard would silently truncate
-# every run in the sweep while still looking like a success.
+# gets killed. Left at 24h rather than trimmed to the new expectation: if bf16 or
+# cudnn.benchmark ever regress to the old 9.28 s/epoch, a guard set close to 2.3h
+# would silently truncate every run in the sweep while still looking successful.
+# Nothing is billed for headroom that is never used.
 TIMEOUT = "24h"
 
 
@@ -368,37 +375,61 @@ def build_user_data(session: str, sha: str, run_id: str, timeout: str,
 
 
 def launch(sessions: list, run_id: str, sha: str, itype: str,
-           timeout: str, env_name: str, dry_run: bool) -> None:
+           timeout: str, env_name: str, dry_run: bool) -> tuple:
+    """
+    One run_instances call per session; returns (launched, failed).
+
+    Each call is MinCount=MaxCount=1, so a capacity shortfall affects one session
+    rather than the whole request -- but an uncaught error would still abandon
+    every session after it, leaving a half-launched sweep and no summary. So each
+    is caught and recorded, and main() prints a retry command for the failures.
+    """
     ec2 = boto3.client("ec2", region_name=REGION)
+    launched, failed = [], []
     for sess in sessions:
         ud = build_user_data(sess, sha, run_id, timeout, env_name)
         if dry_run:
             print(ud)
             print(f"\n# {len(ud)} bytes for {sess}", file=sys.stderr)
-            return
-        r = ec2.run_instances(
-            ImageId=AMI_ID,
-            InstanceType=itype,
-            MinCount=1, MaxCount=1,
-            IamInstanceProfile={"Name": PROFILE},
-            UserData=ud,
-            InstanceInitiatedShutdownBehavior="terminate",
-            MetadataOptions={"HttpTokens": "optional"},
-            TagSpecifications=[{
-                "ResourceType": "instance",
-                "Tags": [
-                    {"Key": "Name", "Value": "train-" + sess},
-                    # The IAM policy only allows terminating instances with
-                    # this tag -- omitting it means you cannot stop the run.
-                    {"Key": "Project", "Value": "video-autoencoder"},
-                    {"Key": "RunId", "Value": run_id},
-                    {"Key": "Session", "Value": sess},
-                    # So an A/B's two arms are distinguishable in the console.
-                    {"Key": "Env", "Value": env_name},
-                ],
-            }],
-        )
-        print(f"  {r['Instances'][0]['InstanceId']}  {sess}")
+            return [], []
+        try:
+            r = ec2.run_instances(
+                ImageId=AMI_ID,
+                InstanceType=itype,
+                MinCount=1, MaxCount=1,
+                IamInstanceProfile={"Name": PROFILE},
+                UserData=ud,
+                InstanceInitiatedShutdownBehavior="terminate",
+                MetadataOptions={"HttpTokens": "optional"},
+                TagSpecifications=[{
+                    "ResourceType": "instance",
+                    "Tags": [
+                        {"Key": "Name", "Value": "train-" + sess},
+                        # The IAM policy only allows terminating instances with
+                        # this tag -- omitting it means you cannot stop the run.
+                        {"Key": "Project", "Value": "video-autoencoder"},
+                        {"Key": "RunId", "Value": run_id},
+                        {"Key": "Session", "Value": sess},
+                        # So an A/B's two arms are distinguishable in console.
+                        {"Key": "Env", "Value": env_name},
+                    ],
+                }],
+            )
+        except ClientError as e:
+            code = e.response.get("Error", {}).get("Code", "ClientError")
+            msg = e.response.get("Error", {}).get("Message", str(e))
+            print(f"  {'FAILED':19s}  {sess}  {code}")
+            failed.append((sess, code, msg))
+            continue
+        except BotoCoreError as e:
+            # Connection/endpoint problems, not an AWS-side rejection.
+            print(f"  {'FAILED':19s}  {sess}  {type(e).__name__}")
+            failed.append((sess, type(e).__name__, str(e)))
+            continue
+        iid = r["Instances"][0]["InstanceId"]
+        print(f"  {iid}  {sess}")
+        launched.append((iid, sess))
+    return launched, failed
 
 
 def status(run_id: str) -> None:
@@ -436,6 +467,9 @@ def main() -> None:
     p.add_argument("--all", action="store_true", help="every session in S3")
     p.add_argument("--sha", help="pin this commit (default: tip of %s)" % BRANCH)
     p.add_argument("--instance-type", default=INSTANCE_TYPE)
+    p.add_argument("--run-id",
+                   help="reuse an existing run id, for retrying failed sessions "
+                        "so all outputs stay under one prefix")
     p.add_argument("--env", default=ENV_NAME,
                    help="config env: configs/<env>_config.json (default: %s)" % ENV_NAME)
     p.add_argument("--timeout", default=TIMEOUT)
@@ -453,12 +487,15 @@ def main() -> None:
     sha = a.sha or resolve_sha(BRANCH)
     preflight(sessions, sha, a.env)
 
-    run_id = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    run_id = a.run_id or datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     print(f"\nrun_id={run_id}  {len(sessions)} session(s) on {a.instance_type}"
           f"  env={a.env}")
-    launch(sessions, run_id, sha, a.instance_type, a.timeout, a.env, a.dry_run)
+    launched, failed = launch(sessions, run_id, sha, a.instance_type, a.timeout,
+                              a.env, a.dry_run)
     if a.dry_run:
         return
+
+    print(f"\n{len(launched)}/{len(sessions)} launched")
 
     print(f"\nwatch:   python {sys.argv[0]} --status {run_id}")
     print(f"outputs: s3://{BUCKET}/{RUNS_PREFIX}{run_id}/")
@@ -467,6 +504,23 @@ def main() -> None:
           f"--filters Name=tag:RunId,Values={run_id} "
           f"Name=instance-state-name,Values=running,pending "
           f"--query 'Reservations[].Instances[].InstanceId' --output text)")
+
+    if failed:
+        # The launched instances are already training and will self-terminate;
+        # only the missing sessions need relaunching.
+        print(f"\n{'=' * 72}")
+        print(f"{len(failed)} session(s) did NOT launch:")
+        for sess, code, msg in failed:
+            print(f"  {sess:36s} {code}")
+            print(f"      {msg[:110]}")
+        print("\nRetry just those. --sha and --run-id are pinned so the retried")
+        print("sessions run identical code and land under the same S3 prefix:\n")
+        print(f"  python {sys.argv[0]} --sha {sha} --run-id {run_id} \\\n"
+              f"      --env {a.env} --instance-type {a.instance_type} "
+              f"--timeout {a.timeout} \\\n"
+              f"      --sessions " + " ".join(sess for sess, _, _ in failed))
+        print(f"{'=' * 72}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
