@@ -13,6 +13,7 @@ reported that as a failure, and the marker came off.
 """
 
 import json
+import sys
 from unittest import mock
 
 import pytest
@@ -344,3 +345,82 @@ def test_capacity_failure_does_not_abort_the_remaining_sessions(aws, monkeypatch
     assert [n for _, n in launched] == ["sess_b", "sess_c"]
     assert [n for n, _, _ in failed] == ["sess_a"]
     assert failed[0][1] == "InsufficientInstanceCapacity"
+
+
+class TestRetryCommandAndIdPinning:
+    """
+    This is the gap the earlier tests missed: everything below lives in main(),
+    which nothing exercised. The retry command is only useful if it is genuinely
+    paste-able -- pinning the sha so retried sessions run the same code, and the
+    inference id so their outputs land in the SAME S3 prefix. Without the id a
+    retry mints a fresh one and the latents end up split across two infer-*
+    folders, which the notebook's "newest batch per run" lookup would silently
+    read only half of.
+    """
+
+    def _run_main(self, monkeypatch, argv, failed, launched=None):
+        """Drive main() with everything below launch() stubbed out."""
+        monkeypatch.setattr(sys, "argv", argv)
+        monkeypatch.setattr(LI, "resolve_sha", lambda ref: SHA)
+        monkeypatch.setattr(LI, "build_jobs",
+                            lambda runs, sess, cks: {"sess_a": [], "sess_b": []})
+        monkeypatch.setattr(LI, "preflight", lambda jobs, sha: None)
+        captured = {}
+
+        def fake_launch(jobs, sha, infer_id, itype, timeout, save_recons, dry_run):
+            captured["infer_id"] = infer_id
+            captured["sha"] = sha
+            return (launched or []), failed
+
+        monkeypatch.setattr(LI, "launch", fake_launch)
+        return captured
+
+    def test_a_generated_inference_id_is_pinned_into_the_retry(
+            self, monkeypatch, capsys):
+        cap = self._run_main(
+            monkeypatch, ["scripts/launch_inference.py", "--runs", "R1",
+                          "--checkpoints", "final"],
+            failed=[("sess_a", "InsufficientInstanceCapacity", "no capacity")])
+        with pytest.raises(SystemExit):
+            LI.main()
+        out = capsys.readouterr().out
+        assert cap["infer_id"].startswith("infer-")
+        assert f"--infer-id {cap['infer_id']}" in out, \
+            "retry must reuse the same inference id, not mint a new one"
+        assert f"--sha {SHA}" in out
+        assert out.rstrip().endswith("=" * 72)
+
+    def test_an_explicit_infer_id_is_honoured(self, monkeypatch, capsys):
+        cap = self._run_main(
+            monkeypatch,
+            ["scripts/launch_inference.py", "--runs", "R1", "--checkpoints",
+             "final", "--infer-id", "infer-PINNED"],
+            failed=[("sess_a", "InsufficientInstanceCapacity", "no capacity")])
+        with pytest.raises(SystemExit):
+            LI.main()
+        assert cap["infer_id"] == "infer-PINNED"
+        assert "--infer-id infer-PINNED" in capsys.readouterr().out
+
+    def test_retry_lists_only_the_failed_sessions(self, monkeypatch, capsys):
+        self._run_main(
+            monkeypatch, ["scripts/launch_inference.py", "--runs", "R1",
+                          "--checkpoints", "final"],
+            launched=[("i-1", "sess_b")],
+            failed=[("sess_a", "InsufficientInstanceCapacity", "no capacity")])
+        with pytest.raises(SystemExit):
+            LI.main()
+        out = capsys.readouterr().out
+        sessions_line = [l for l in out.splitlines() if "--sessions" in l][0]
+        assert "sess_a" in sessions_line
+        assert "sess_b" not in sessions_line, "a launched session must not be retried"
+
+    def test_no_failure_summary_and_no_exit_when_everything_launches(
+            self, monkeypatch, capsys):
+        self._run_main(monkeypatch,
+                       ["scripts/launch_inference.py", "--runs", "R1",
+                        "--checkpoints", "final"],
+                       launched=[("i-1", "sess_a"), ("i-2", "sess_b")], failed=[])
+        LI.main()          # must NOT raise SystemExit
+        out = capsys.readouterr().out
+        assert "did NOT launch" not in out
+        assert "2/2 instance(s) launched" in out

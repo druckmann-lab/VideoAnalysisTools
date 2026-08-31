@@ -18,6 +18,7 @@ No test may reach real AWS; see tests/conftest.py.
 
 import json
 import subprocess
+import sys
 from unittest import mock
 
 import pytest
@@ -337,3 +338,105 @@ class TestSharedValidation:
         import aws_launch_common as C
         with pytest.raises(AssertionError, match=match):
             C.validate_user_data(bad)
+
+
+class TestRetryCommandAndIdPinning:
+    """
+    Covers main(), which the rest of this file does not reach. The retry command
+    is only useful if pasting it puts the retried sessions in the same sweep:
+    same pinned sha, same run id, hence the same S3 prefix that --status reads.
+    """
+
+    def _run_main(self, monkeypatch, argv, failed, launched=None):
+        monkeypatch.setattr(sys, "argv", argv)
+        monkeypatch.setattr(LT, "resolve_sha", lambda ref: SHA)
+        monkeypatch.setattr(LT, "preflight", lambda sessions, sha, env: None)
+        captured = {}
+
+        def fake_launch(sessions, run_id, sha, itype, timeout, env, dry_run):
+            captured.update(run_id=run_id, sha=sha, sessions=sessions)
+            return (launched or []), failed
+
+        monkeypatch.setattr(LT, "launch", fake_launch)
+        return captured
+
+    def test_a_generated_run_id_is_pinned_into_the_retry(self, monkeypatch, capsys):
+        cap = self._run_main(
+            monkeypatch,
+            ["scripts/launch_training.py", "--sessions", "sess_a", "sess_b"],
+            failed=[("sess_a", "InsufficientInstanceCapacity", "no capacity")])
+        with pytest.raises(SystemExit):
+            LT.main()
+        out = capsys.readouterr().out
+        assert f"--run-id {cap['run_id']}" in out, \
+            "retry must reuse the same run id, not start a second sweep prefix"
+        assert f"--sha {SHA}" in out
+
+    def test_an_explicit_run_id_is_honoured(self, monkeypatch, capsys):
+        cap = self._run_main(
+            monkeypatch,
+            ["scripts/launch_training.py", "--sessions", "sess_a",
+             "--run-id", "20260831-PINNED"],
+            failed=[("sess_a", "InsufficientInstanceCapacity", "no capacity")])
+        with pytest.raises(SystemExit):
+            LT.main()
+        assert cap["run_id"] == "20260831-PINNED"
+        assert "--run-id 20260831-PINNED" in capsys.readouterr().out
+
+    def test_env_and_timeout_are_carried_into_the_retry(self, monkeypatch, capsys):
+        """A retry under a different env would silently be a different experiment."""
+        self._run_main(
+            monkeypatch,
+            ["scripts/launch_training.py", "--sessions", "sess_a",
+             "--env", "aws_batch_fastcycle", "--timeout", "9h"],
+            failed=[("sess_a", "InsufficientInstanceCapacity", "no capacity")])
+        with pytest.raises(SystemExit):
+            LT.main()
+        out = capsys.readouterr().out
+        assert "--env aws_batch_fastcycle" in out
+        assert "--timeout 9h" in out
+
+    def test_success_exits_cleanly_with_no_retry_block(self, monkeypatch, capsys):
+        self._run_main(monkeypatch,
+                       ["scripts/launch_training.py", "--sessions", "sess_a"],
+                       launched=[("i-1", "sess_a")], failed=[])
+        LT.main()
+        assert "did NOT launch" not in capsys.readouterr().out
+
+
+class TestRetryCommandFormatting:
+    """The shared formatter -- both launchers depend on it being paste-able."""
+
+    def test_is_a_single_shell_command_with_continuations(self):
+        import aws_launch_common as C
+        cmd = C.retry_command("scripts/x.py", {"sha": "abc", "run-id": "r1"},
+                              ["s1", "s2"])
+        lines = cmd.splitlines()
+        # every line but the last must end in a backslash continuation
+        assert all(l.rstrip().endswith("\\") for l in lines[:-1]), cmd
+        assert not lines[-1].rstrip().endswith("\\")
+        assert lines[-1].strip() == "--sessions s1 s2"
+        assert "--sha abc" in cmd and "--run-id r1" in cmd
+
+    def test_survives_many_sessions_and_flags(self):
+        import aws_launch_common as C
+        cmd = C.retry_command("scripts/x.py",
+                              {f"flag{i}": f"value{i}" for i in range(8)},
+                              [f"session_{i}" for i in range(20)])
+        assert all(l.rstrip().endswith("\\") for l in cmd.splitlines()[:-1])
+        for i in range(20):
+            assert f"session_{i}" in cmd
+
+    def test_never_splits_a_flag_from_its_value(self):
+        """
+        Regression: textwrap wrapped on whitespace, so a long flag list put
+        "--run-id" on one line and its value on the next. Shell-valid, but the
+        flag no longer reads as a unit and cannot be grepped for.
+        """
+        import aws_launch_common as C
+        flags = {"sha": "b" * 40, "run-id": "20260831-105222",
+                 "env": "aws_batch_fastcycle", "instance-type": "g5.2xlarge",
+                 "timeout": "12h"}
+        cmd = C.retry_command("scripts/x.py", flags, ["s1"])
+        for k, v in flags.items():
+            assert f"--{k} {v}" in cmd, f"--{k} was split from its value:\n{cmd}"

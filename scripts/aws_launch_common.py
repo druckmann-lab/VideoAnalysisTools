@@ -252,6 +252,35 @@ def launch_instances(specs, itype: str, dry_run: bool = False) -> tuple:
     return launched, failed
 
 
+def retry_command(script: str, flags: dict, sessions) -> str:
+    """
+    A paste-able command that relaunches exactly the sessions that failed.
+
+    Every identity-bearing flag has to be pinned here, not just the obvious ones:
+    the sha so the retry runs the same code as the sessions that did launch, and
+    the run/inference id so its outputs land in the SAME S3 prefix. Without the
+    id the retry mints a fresh one, and the results end up split across two
+    prefixes that later analysis has to reconcile by hand -- which is exactly the
+    kind of quiet mess that only shows up weeks later.
+    """
+    # Wrap between flags, never inside one: textwrap would happily put "--run-id"
+    # at the end of a line and its value at the start of the next. Still valid
+    # shell, but the flag stops reading as a unit and nothing can grep for it.
+    lines, cur = [], ""
+    for pair in (f"--{k} {v}" for k, v in flags.items()):
+        if cur and len(cur) + 1 + len(pair) > 66:
+            lines.append(cur)
+            cur = pair
+        else:
+            cur = f"{cur} {pair}".strip()
+    if cur:
+        lines.append(cur)
+    out = [f"  python {script} \\"]
+    out += [f"      {l} \\" for l in lines]
+    out.append("      --sessions " + " ".join(sessions))
+    return "\n".join(out)
+
+
 def print_failure_summary(failed, retry_command: str, noun: str = "session") -> None:
     """
     Report what did not launch, with a command to retry exactly those.

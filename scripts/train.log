@@ -1,0 +1,47 @@
+2026-08-27T18:04:43 Parent directory: /home/ubuntu/VideoAnalysisTools
+2026-08-27T18:05:21 --- Initializing Training Pipeline (AWS_BATCH Environment) ---
+2026-08-27T18:05:21 {'metadata_config': {'behavior_channel_map': {'outcome': 0, 'trial_type': 1, 'early_lick_sample': 2, 'early_lick_delay': 3, 'airpuff': 4, 'autowater': 5, 'water_volume': 6, 'trial_length': 7, 'z_pos': 8, 'laser_power': 9, 'n_licks': 11, 'protocol': 12, 'reaction_time': 14, 'sample_start': 15, 'delay_start': 16, 'go_time': 17, 'reward_time': 18, 'freewater_outcome': 19, 'reward1': 20}, 'stratification_columns': ['outcome', 'trial_type', 'airpuff'], 'split_random_seed': 42, 'bpod_folder': '/opt/dlami/nvme/', 'h5_folder': '/opt/dlami/nvme/', 'bpod_path': '/opt/dlami/nvme/kd104_twNew_20221124_104921.bpod.npy', 'h5_path': '/opt/dlami/nvme/kd104_twNew_20221124_104921_side_crop.h5'}, 'dataset': {'frame_selection_method': 'frame_subsample', 'train_nth_frame': 10, 'subtract_mean_frame': True, 'mean_frame_path': '/opt/dlami/nvme/kd104_twNew_20221124_104921_mean_frame.npy', 'type': 'H5VideoDataset', 'dataset_path': '/opt/dlami/nvme/kd104_twNew_20221124_104921_side_crop.h5', 'loss_mask_exclude_regions': None}, 'data': {'image_height': 120, 'image_width': 112, 'crop_top': 25, 'crop_bottom': 90, 'crop_left': 240, 'crop_right': 0, 'data_path': None}, 'model': {'num_blocks': 2, 'in_channels_0': 1, 'out_channels_0': 16, 'in_channels_1': 16, 'out_channels_1': 32, 'kernel_preconv': 3, 'stride_preconv': 1, 'pool_size_preconv_0': 2, 'pool_size_preconv_1': 4, 'use_batch_norm_preconv': False, 'kernel_residual': 3, 'stride_residual': 1, 'use_batch_norm_residual': False, 'pool_size_residual_0': None, 'pool_size_residual_1': 4, 'n_layers_residual': 3, 'out_conv': 288, 'out_linear': 128, 'embed_size': 16, 'use_batch_norm_linear': False, 'image_height': 120, 'image_width': 112}, 'training': {'batch_size': 2048, 'learning_rate': 0.001, 'latent_lambda': 0.001, 'epochs': 6000, 'lr_scheduler': 'CosineAnnealingWarmRestarts', 'checkpoint_interval': 100, 'save_best_model': True, 'checkpoint_dir': '/opt/dlami/nvme/checkpoints/'}}
+2026-08-27T18:05:21 Loading dataset into RAM...
+2026-08-27T18:06:25 Loaded 1194461 frames into RAM
+2026-08-27T18:06:25 Reusing 1194461 frames already in RAM (shared)
+2026-08-27T18:06:25 Reusing 1194461 frames already in RAM (shared)
+2026-08-27T18:07:38 Epoch 01/6000 | Train Loss: 0.023449 | Val Loss: 0.015585 | Val Recon Loss: 0.015356 | Val Latent Loss: 0.228634 | LR: 9.999901e-04
+2026-08-27T18:07:53 Epoch 02/6000 | Train Loss: 0.011749 | Val Loss: 0.009762 | Val Recon Loss: 0.009435 | Val Latent Loss: 0.327062 | LR: 9.999606e-04
+2026-08-27T18:08:09 Epoch 03/6000 | Train Loss: 0.009379 | Val Loss: 0.009057 | Val Recon Loss: 0.008740 | Val Latent Loss: 0.317289 | LR: 9.999113e-04
+2026-08-27T18:08:24 Epoch 04/6000 | Train Loss: 0.008585 | Val Loss: 0.007994 | Val Recon Loss: 0.007646 | Val Latent Loss: 0.347917 | LR: 9.998423e-04
+2026-08-27T18:08:39 Epoch 05/6000 | Train Loss: 0.007455 | Val Loss: 0.007090 | Val Recon Loss: 0.006711 | Val Latent Loss: 0.379261 | LR: 9.997535e-04
+2026-08-27T18:08:55 Epoch 06/6000 | Train Loss: 0.006948 | Val Loss: 0.006842 | Val Recon Loss: 0.006487 | Val Latent Loss: 0.354145 | LR: 9.996451e-04
+2026-08-27T18:09:10 Epoch 07/6000 | Train Loss: 0.006767 | Val Loss: 0.006692 | Val Recon Loss: 0.006367 | Val Latent Loss: 0.325063 | LR: 9.995170e-04
+2026-08-27T18:09:26 Epoch 08/6000 | Train Loss: 0.006609 | Val Loss: 0.006515 | Val Recon Loss: 0.006210 | Val Latent Loss: 0.305668 | LR: 9.993691e-04
+2026-08-27T18:09:41 Epoch 09/6000 | Train Loss: 0.006419 | Val Loss: 0.006317 | Val Recon Loss: 0.006031 | Val Latent Loss: 0.286264 | LR: 9.992016e-04
+2026-08-27T18:09:57 Epoch 10/6000 | Train Loss: 0.006223 | Val Loss: 0.006133 | Val Recon Loss: 0.005862 | Val Latent Loss: 0.270385 | LR: 9.990144e-04
+2026-08-27T18:10:12 Epoch 11/6000 | Train Loss: 0.006050 | Val Loss: 0.005959 | Val Recon Loss: 0.005702 | Val Latent Loss: 0.256628 | LR: 9.988074e-04
+2026-08-27T18:10:27 Epoch 12/6000 | Train Loss: 0.005866 | Val Loss: 0.005764 | Val Recon Loss: 0.005513 | Val Latent Loss: 0.250997 | LR: 9.985809e-04
+2026-08-27T18:10:43 Epoch 13/6000 | Train Loss: 0.005665 | Val Loss: 0.005562 | Val Recon Loss: 0.005316 | Val Latent Loss: 0.245495 | LR: 9.983346e-04
+2026-08-27T18:10:58 Epoch 14/6000 | Train Loss: 0.005456 | Val Loss: 0.005391 | Val Recon Loss: 0.005156 | Val Latent Loss: 0.234382 | LR: 9.980687e-04
+2026-08-27T18:11:13 Epoch 15/6000 | Train Loss: 0.005262 | Val Loss: 0.005164 | Val Recon Loss: 0.004929 | Val Latent Loss: 0.234898 | LR: 9.977832e-04
+2026-08-27T18:11:29 Epoch 16/6000 | Train Loss: 0.005061 | Val Loss: 0.004960 | Val Recon Loss: 0.004728 | Val Latent Loss: 0.231815 | LR: 9.974780e-04
+2026-08-27T18:11:44 Epoch 17/6000 | Train Loss: 0.004849 | Val Loss: 0.004758 | Val Recon Loss: 0.004519 | Val Latent Loss: 0.238619 | LR: 9.971532e-04
+2026-08-27T18:12:00 Epoch 18/6000 | Train Loss: 0.004655 | Val Loss: 0.004571 | Val Recon Loss: 0.004336 | Val Latent Loss: 0.235394 | LR: 9.968088e-04
+2026-08-27T18:12:15 Epoch 19/6000 | Train Loss: 0.004495 | Val Loss: 0.004412 | Val Recon Loss: 0.004181 | Val Latent Loss: 0.231159 | LR: 9.964449e-04
+2026-08-27T18:12:30 Epoch 20/6000 | Train Loss: 0.004349 | Val Loss: 0.004284 | Val Recon Loss: 0.004056 | Val Latent Loss: 0.228609 | LR: 9.960613e-04
+2026-08-27T18:12:45 Epoch 21/6000 | Train Loss: 0.004239 | Val Loss: 0.004184 | Val Recon Loss: 0.003960 | Val Latent Loss: 0.223219 | LR: 9.956582e-04
+2026-08-27T18:13:01 Epoch 22/6000 | Train Loss: 0.004144 | Val Loss: 0.004118 | Val Recon Loss: 0.003896 | Val Latent Loss: 0.221520 | LR: 9.952355e-04
+2026-08-27T18:13:16 Epoch 23/6000 | Train Loss: 0.004081 | Val Loss: 0.004056 | Val Recon Loss: 0.003840 | Val Latent Loss: 0.215519 | LR: 9.947933e-04
+2026-08-27T18:13:32 Epoch 24/6000 | Train Loss: 0.004034 | Val Loss: 0.004018 | Val Recon Loss: 0.003808 | Val Latent Loss: 0.209317 | LR: 9.943315e-04
+2026-08-27T18:13:47 Epoch 25/6000 | Train Loss: 0.003995 | Val Loss: 0.003986 | Val Recon Loss: 0.003782 | Val Latent Loss: 0.203992 | LR: 9.938503e-04
+2026-08-27T18:14:03 Epoch 26/6000 | Train Loss: 0.003964 | Val Loss: 0.003946 | Val Recon Loss: 0.003749 | Val Latent Loss: 0.197365 | LR: 9.933496e-04
+2026-08-27T18:14:18 Epoch 27/6000 | Train Loss: 0.003930 | Val Loss: 0.003910 | Val Recon Loss: 0.003716 | Val Latent Loss: 0.193423 | LR: 9.928295e-04
+2026-08-27T18:14:34 Epoch 28/6000 | Train Loss: 0.003890 | Val Loss: 0.003887 | Val Recon Loss: 0.003697 | Val Latent Loss: 0.190544 | LR: 9.922899e-04
+2026-08-27T18:14:49 Epoch 29/6000 | Train Loss: 0.003851 | Val Loss: 0.003826 | Val Recon Loss: 0.003641 | Val Latent Loss: 0.185068 | LR: 9.917309e-04
+2026-08-27T18:15:04 Epoch 30/6000 | Train Loss: 0.003804 | Val Loss: 0.003804 | Val Recon Loss: 0.003631 | Val Latent Loss: 0.172598 | LR: 9.911525e-04
+2026-08-27T18:15:19 Epoch 31/6000 | Train Loss: 0.003752 | Val Loss: 0.003713 | Val Recon Loss: 0.003534 | Val Latent Loss: 0.179808 | LR: 9.905547e-04
+2026-08-27T18:15:34 Epoch 32/6000 | Train Loss: 0.003682 | Val Loss: 0.003658 | Val Recon Loss: 0.003480 | Val Latent Loss: 0.177546 | LR: 9.899376e-04
+2026-08-27T18:15:50 Epoch 33/6000 | Train Loss: 0.003622 | Val Loss: 0.003589 | Val Recon Loss: 0.003412 | Val Latent Loss: 0.176905 | LR: 9.893012e-04
+2026-08-27T18:16:05 Epoch 34/6000 | Train Loss: 0.003559 | Val Loss: 0.003526 | Val Recon Loss: 0.003351 | Val Latent Loss: 0.175223 | LR: 9.886454e-04
+2026-08-27T18:16:20 Epoch 35/6000 | Train Loss: 0.003495 | Val Loss: 0.003480 | Val Recon Loss: 0.003310 | Val Latent Loss: 0.170358 | LR: 9.879704e-04
+2026-08-27T18:16:35 Epoch 36/6000 | Train Loss: 0.003435 | Val Loss: 0.003412 | Val Recon Loss: 0.003243 | Val Latent Loss: 0.168903 | LR: 9.872762e-04
+2026-08-27T18:16:51 Epoch 37/6000 | Train Loss: 0.003378 | Val Loss: 0.003366 | Val Recon Loss: 0.003200 | Val Latent Loss: 0.165597 | LR: 9.865627e-04
+2026-08-27T18:17:06 Epoch 38/6000 | Train Loss: 0.003330 | Val Loss: 0.003321 | Val Recon Loss: 0.003151 | Val Latent Loss: 0.170276 | LR: 9.858301e-04
+2026-08-27T18:17:22 Epoch 39/6000 | Train Loss: 0.003289 | Val Loss: 0.003273 | Val Recon Loss: 0.003109 | Val Latent Loss: 0.164522 | LR: 9.850782e-04
+2026-08-27T18:17:37 Epoch 40/6000 | Train Loss: 0.003258 | Val Loss: 0.003231 | Val Recon Loss: 0.003068 | Val Latent Loss: 0.162636 | LR: 9.843073e-04

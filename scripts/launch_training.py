@@ -60,6 +60,7 @@ from aws_launch_common import (BPOD_PREFIX, BRANCH, BUCKET, GH_REPO, H5_PREFIX,
                                RUNS_PREFIX, fetch_at_sha, launch_instances,
                                missing_session_inputs, print_failure_summary,
                                resolve_config_chain, resolve_sha,
+                               retry_command,
                                validate_user_data)
 
 INSTANCE_TYPE = "g5.2xlarge"
@@ -412,10 +413,13 @@ def main() -> None:
           f"--query 'Reservations[].Instances[].InstanceId' --output text)")
 
     if failed:
-        retry = (f"  python {sys.argv[0]} --sha {sha} --run-id {run_id} \\\n"
-                 f"      --env {a.env} --instance-type {a.instance_type} "
-                 f"--timeout {a.timeout} \\\n"
-                 f"      --sessions " + " ".join(s for s, _, _ in failed))
+        retry = retry_command(sys.argv[0], {
+            "sha": sha,
+            "run-id": run_id,              # same prefix as the ones that worked
+            "env": a.env,
+            "instance-type": a.instance_type,
+            "timeout": a.timeout,
+        }, [s for s, _, _ in failed])
         print_failure_summary(failed, retry, noun="session")
         sys.exit(1)
 

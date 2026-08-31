@@ -1,0 +1,59 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadSourceData",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::balint-video-autoencoder-data-233060639700-us-west-2-an/preprocessed_videos/*",
+        "arn:aws:s3:::balint-video-autoencoder-data-233060639700-us-west-2-an/bpod_files/*"
+      ]
+    },
+    {
+      "Sid": "WriteMeanFrames",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::balint-video-autoencoder-data-233060639700-us-west-2-an/mean_frames/*"
+      ]
+    },
+    {
+      "Sid": "WriteOutputs",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::balint-video-autoencoder-data-233060639700-us-west-2-an/runs/*",
+        "arn:aws:s3:::balint-video-autoencoder-data-233060639700-us-west-2-an/smoke/*"
+      ]
+    },
+    {
+      "Sid": "ListScopedPrefixes",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket"
+      ],
+      "Resource": "arn:aws:s3:::balint-video-autoencoder-data-233060639700-us-west-2-an",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "preprocessed_videos/*",
+            "bpod_files/*",
+            "mean_frames/*",
+            "runs/*",
+            "smoke/*",
+            ""
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -46,6 +46,7 @@ from aws_launch_common import (BPOD_PREFIX, BRANCH, BUCKET, GH_REPO,
                                check_s3_write_prefix, fetch_at_sha,
                                launch_instances, missing_session_inputs,
                                print_failure_summary, resolve_sha,
+                               retry_command,
                                validate_user_data)
 
 INSTANCE_TYPE = "g5.2xlarge"
@@ -463,6 +464,9 @@ def main() -> None:
     p.add_argument("--save-recons", action="store_true",
                    help="also write reconstructions (~11 GB RAM; use g5.4xlarge)")
     p.add_argument("--sha", help="pin this commit (default: tip of %s)" % BRANCH)
+    p.add_argument("--infer-id",
+                   help="reuse an existing inference id, for retrying failed "
+                        "sessions so all outputs stay under one prefix")
     p.add_argument("--instance-type", default=INSTANCE_TYPE)
     p.add_argument("--timeout", default=TIMEOUT)
     p.add_argument("--dry-run", action="store_true")
@@ -492,7 +496,8 @@ def main() -> None:
     jobs = build_jobs(a.runs, a.sessions or [], a.checkpoints)
     preflight(jobs, sha)
 
-    infer_id = datetime.datetime.now().strftime("infer-%Y%m%d-%H%M%S")
+    infer_id = a.infer_id or datetime.datetime.now().strftime(
+        "infer-%Y%m%d-%H%M%S")
     print(f"\ninference_id={infer_id}  {len(jobs)} instance(s) on {a.instance_type}")
     for session, joblist in jobs.items():
         print(f"  {session}: " + ", ".join(f"{r}/{l}" for r, l, _, _ in joblist))
@@ -512,10 +517,13 @@ def main() -> None:
           f"--query 'Reservations[].Instances[].InstanceId' --output text)")
 
     if failed:
-        retry = (f"  python {sys.argv[0]} --runs {' '.join(a.runs)} \\\n"
-                 f"      --sha {sha} --checkpoints {' '.join(a.checkpoints)} "
-                 f"--instance-type {a.instance_type} \\\n"
-                 f"      --sessions " + " ".join(s for s, _, _ in failed))
+        retry = retry_command(sys.argv[0], {
+            "runs": " ".join(a.runs),
+            "sha": sha,
+            "infer-id": infer_id,          # same prefix as the ones that worked
+            "checkpoints": " ".join(a.checkpoints),
+            "instance-type": a.instance_type,
+        }, [s for s, _, _ in failed])
         print_failure_summary(failed, retry, noun="session")
         sys.exit(1)
 
