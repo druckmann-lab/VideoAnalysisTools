@@ -80,11 +80,11 @@ RUNS_PREFIX = "runs/"
 
 # epochs=1500 at 5.43 s/epoch is ~2.3h expected. This is a runaway guard, not a
 # schedule -- do not set it near the expected runtime or a slow-but-healthy run
-# gets killed. Left at 24h rather than trimmed to the new expectation: if bf16 or
+# gets killed. Trimmed it slightly given the new expectation: if bf16 or
 # cudnn.benchmark ever regress to the old 9.28 s/epoch, a guard set close to 2.3h
 # would silently truncate every run in the sweep while still looking successful.
 # Nothing is billed for headroom that is never used.
-TIMEOUT = "24h"
+TIMEOUT = "12h"
 
 
 USER_DATA_TEMPLATE = r'''#!/bin/bash
